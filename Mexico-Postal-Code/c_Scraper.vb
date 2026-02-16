@@ -15,7 +15,7 @@ Public Class c_Scraper
     Private Property _cookieContainer As New CookieContainer
     Public Property Host As String = String.Empty
     Public Property Referer As String = String.Empty
-
+    Public Property Origin As String = String.Empty
     Sub New()
         Dim handler As New HttpClientHandler() With {
             .AutomaticDecompression = DecompressionMethods.All,
@@ -25,23 +25,28 @@ Public Class c_Scraper
         _httpClient = New HttpClient(handler)
     End Sub
 
-    Private Sub Headers()
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/146.0")
-        _httpClient.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-        _httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.5")
-        _httpClient.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, br, zstd")
-        _httpClient.DefaultRequestHeaders.Add("Connection", "keep-alive")
-        If Not String.IsNullOrEmpty(Host) Then
-            _httpClient.DefaultRequestHeaders.Host = Host
-        End If
-        If Not String.IsNullOrEmpty(Referer) Then
-            _httpClient.DefaultRequestHeaders.Referrer = New Uri(Referer)
-        End If
+    Private Sub SetHeaders()
+        With _httpClient.DefaultRequestHeaders
+            .Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/146.0")
+            .Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .Add("Accept-Language", "en-US,en;q=0.5")
+            .Add("Accept-Encoding", "gzip, deflate, br, zstd")
+            .Add("Connection", "keep-alive")
+            If Not String.IsNullOrEmpty(Origin) Then
+                .Add("Origin", Origin)
+            End If
+            If Not String.IsNullOrEmpty(Host) Then
+                .Host = Host
+            End If
+            If Not String.IsNullOrEmpty(Referer) Then
+                .Referrer = New Uri(Referer)
+            End If
+        End With
     End Sub
 
-    Public Async Function [GET](url As String) As Task(Of String)
+    Public Async Function [Get](url As String) As Task(Of String)
 
-        Headers()
+        SetHeaders()
         Using response As HttpResponseMessage = Await _httpClient.GetAsync(url)
 
             If response.IsSuccessStatusCode Then
@@ -51,14 +56,14 @@ Public Class c_Scraper
 
         Return String.Empty
     End Function
-    Public Async Function POST(url As String, content As String) As Task(Of String)
+    Public Async Function Post(url As String, content As String) As Task(Of String)
         ' Convenience overload that wraps a string into StringContent
         Dim httpContent As New StringContent(content, Encoding.UTF8, "application/x-www-form-urlencoded")
         Return Await InternalPost(url, httpContent)
     End Function
 
     Private Async Function InternalPost(url As String, content As HttpContent) As Task(Of String)
-        Headers()
+        SetHeaders()
         Using response As HttpResponseMessage = Await _httpClient.PostAsync(url, content)
 
             If response.IsSuccessStatusCode Then
@@ -102,7 +107,8 @@ Public Class c_Scraper
                         End Select
                     End If
 
-                    Dim tmp As String = Path.Combine(Path.GetTempPath(), fileName)
+                    Dim desktop As String = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
+                    Dim tmp As String = Path.Combine(desktop, fileName)
                     File.WriteAllBytes(tmp, bytes)
                     Return "FILE:" & tmp
                 Else

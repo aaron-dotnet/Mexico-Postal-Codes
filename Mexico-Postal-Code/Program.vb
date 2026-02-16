@@ -12,34 +12,43 @@ Module Program
     End Structure
 
     Sub Main()
-        PrimeraParte().GetAwaiter().GetResult()
+        GetPostalCodes().GetAwaiter().GetResult()
     End Sub
 
-    Public Async Function PrimeraParte() As Task
-        Dim main_url As String = "https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/CodigoPostal_Exportar.aspx"
+    Public Async Function GetPostalCodes() As Task
+        Dim mainUrl As String = "https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/CodigoPostal_Exportar.aspx"
+        Dim host As String = "www.correosdemexico.gob.mx"
 
         Using scraper As New c_Scraper()
-            scraper.Host = "www.correosdemexico.gob.mx"
+            scraper.Host = host
             scraper.Referer = "https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx"
 
             ' primera interacción
-            Dim response As String = Await scraper.GET(main_url)
+            Dim response As String = Await scraper.Get(mainUrl)
+            Dim necessaryData As String = GetString(response,
+                                                    startStr:="<input type=""hidden"" name=""__EVENTTARGET""",
+                                                    endStr:="<nav class=""navbar",
+                                                    firstCoincidence:=True)
 
-            Dim htmlContent As String = GetString(response,
-                                                  startStr:="<input type=""hidden"" name=""__EVENTTARGET""",
-                                                  endStr:="<nav class=""navbar",
-                                                  firstCoincidence:=True)
+            Dim postData As String = BuildPostData(necessaryData)
 
-            Dim post As String = BuildPostData(htmlContent)
+            scraper.Origin = "https://www.correosdemexico.gob.mx"
+            scraper.Referer = "https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/CodigoPostal_Exportar.aspx"
 
-            scraper.POST("", "")
+            Dim response2 As String = Await scraper.Post(mainUrl, postData)
+            Stop
         End Using
 
         'GetString("", "", 1)
     End Function
 
     Public Function BuildPostData(htmlContent As String) As String
-        Dim coor As s_Coordinates = GenerarCordenadas()
+        Dim coor As s_Coordinates = GenerateCoordinates()
+        Dim fileType As String = "txt"
+
+        ' En este caso, la página solo responde con valores estos inputs:
+        ' VIEWSTATE, VIEWSTATEGENERATOR y EVENTVALIDATION,
+        ' pero se agregarón los demás campos ya que existen en el HTML y se mandan tal cual en el Post.
 
         Dim post As String =
             $"__EVENTTARGET={GetInputValue(htmlContent, "__EVENTTARGET")}&" &
@@ -49,11 +58,10 @@ Module Program
             $"__VIEWSTATEGENERATOR={GetInputValue(htmlContent, "__VIEWSTATEGENERATOR")}&" &
             $"__EVENTVALIDATION={GetInputValue(htmlContent, "__EVENTVALIDATION")}&" &
             $"cboEdo=00&" &
-            $"rblTipo=txt&" &
+            $"rblTipo={fileType}&" &
             $"btnDescarga.x={coor.X_POS}&" &
             $"btnDescarga.y={coor.Y_POS}"
 
-        ' Formateamos 
         Return post
     End Function
 
@@ -64,17 +72,20 @@ Module Program
                                          excessAmount:=[end].Length,
                                          firstCoincidence:=True).
                                          Replace(start, String.Empty)
+        If String.IsNullOrEmpty(result) Then
+            Return String.Empty
+        End If
 
-        Return result
+        Return System.Net.WebUtility.UrlEncode(result)
     End Function
 
 
-    Public Function GenerarCordenadas() As s_Coordinates
-        ' # Cordenadas asociadas a un boton de la pagina que registra donde se hizo clic
-        '   para mandarlo en el Post
+    Public Function GenerateCoordinates() As s_Coordinates
+        ' # Cordenadas asociadas a un boton de descarga de la pagina
+        '   que registra donde se hizo clic (dentro del boton) para mandarlo en el Post
         Dim generator As New System.Random()
-        Dim Y_POS As Integer = generator.Next(2, 22)
-        Dim X_POS As Integer = generator.Next(2, 72)
+        Dim Y_POS As Integer = generator.Next(2S, 22S)
+        Dim X_POS As Integer = generator.Next(2S, 72s)
 
         Return New s_Coordinates(X_POS, Y_POS)
     End Function
@@ -82,6 +93,7 @@ Module Program
     Private Function GetString(fullString As String, startStr As String, endStr As String,
                                Optional excessAmount As Integer = 0,
                                Optional firstCoincidence As Boolean = False) As String
+        ' Función para filtrar contenido de una cadena.
 
         Dim startWord As Integer = fullString.IndexOf(startStr, StringComparison.OrdinalIgnoreCase)
         If startWord = -1 Then Return String.Empty
