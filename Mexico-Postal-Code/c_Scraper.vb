@@ -110,7 +110,7 @@ Public Class c_Scraper
                     Dim desktop As String = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
                     Dim tmp As String = Path.Combine(desktop, fileName)
                     File.WriteAllBytes(tmp, bytes)
-                    Return "FILE:" & tmp
+                    Return tmp
                 Else
                     Return Await respContent.ReadAsStringAsync()
                 End If
