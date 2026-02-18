@@ -1,33 +1,35 @@
 ﻿Option Strict On
 Option Infer Off
 
+Imports System.IO
 Imports System.Net
 Imports System.Net.Http
-Imports System.IO
-Imports System.Text
 Imports System.Net.Http.Headers
+Imports System.Text
 
 
 Public Class c_Scraper
     Implements IDisposable
-
     Private Property _httpClient As HttpClient
+    Private Property _handler As HttpClientHandler
     Private Property _cookieContainer As New CookieContainer
     Public Property Host As String = String.Empty
     Public Property Referer As String = String.Empty
     Public Property Origin As String = String.Empty
     Sub New()
-        Dim handler As New HttpClientHandler() With {
+        _handler = New HttpClientHandler() With {
             .AutomaticDecompression = DecompressionMethods.All,
             .CookieContainer = _cookieContainer,
             .UseCookies = True
         }
-        _httpClient = New HttpClient(handler)
+        _httpClient = New HttpClient(_handler)
     End Sub
 
     Private Sub SetHeaders()
+        Dim firefoxVersion As String = "146.0"
+
         With _httpClient.DefaultRequestHeaders
-            .Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/146.0")
+            .Add("User-Agent", $"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:{firefoxVersion}) Gecko/20100101 Firefox/{firefoxVersion}")
             .Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .Add("Accept-Language", "en-US,en;q=0.5")
             .Add("Accept-Encoding", "gzip, deflate, br, zstd")
@@ -45,7 +47,6 @@ Public Class c_Scraper
     End Sub
 
     Public Async Function [Get](url As String) As Task(Of String)
-
         SetHeaders()
         Using response As HttpResponseMessage = Await _httpClient.GetAsync(url)
 
@@ -57,7 +58,6 @@ Public Class c_Scraper
         Return String.Empty
     End Function
     Public Async Function Post(url As String, content As String) As Task(Of String)
-        ' Convenience overload that wraps a string into StringContent
         Dim httpContent As New StringContent(content, Encoding.UTF8, "application/x-www-form-urlencoded")
         Return Await InternalPost(url, httpContent)
     End Function
@@ -67,61 +67,68 @@ Public Class c_Scraper
         Using response As HttpResponseMessage = Await _httpClient.PostAsync(url, content)
 
             If response.IsSuccessStatusCode Then
-                Dim respContent As HttpContent = response.Content
+                Using respContent As HttpContent = response.Content
 
-                ' Detect Content-Disposition filename (attachment)
-                Dim cd As ContentDispositionHeaderValue = respContent.Headers.ContentDisposition
-                Dim contentType As String = If(respContent.Headers.ContentType?.MediaType, String.Empty)
-                Dim isFile As Boolean = False
-                Dim fileName As String = Nothing
+                    ' Detect Content-Disposition filename (attachment)
+                    Dim contentDisposition As ContentDispositionHeaderValue = respContent.Headers.ContentDisposition
+                    Dim contentType As String = If(respContent.Headers.ContentType?.MediaType, String.Empty)
+                    Dim isFile As Boolean = False
+                    Dim fileName As String = Nothing
 
-                If cd IsNot Nothing AndAlso Not String.IsNullOrEmpty(cd.FileName) Then
-                    isFile = True
-                    fileName = cd.FileName.Trim(""""c)
-                ElseIf Not String.IsNullOrEmpty(contentType) AndAlso
-                        Not contentType.StartsWith("text", StringComparison.OrdinalIgnoreCase) AndAlso
-                        Not contentType.Contains("json") AndAlso Not contentType.Contains("xml") AndAlso
-                        Not contentType.Contains("html") Then
-                    isFile = True
-                End If
-
-                If isFile Then
-                    Dim bytes As Byte() = Await respContent.ReadAsByteArrayAsync()
-                    If String.IsNullOrEmpty(fileName) Then
-                        fileName = "download_" & DateTime.Now.ToString("yyyyMMddHHmmss")
-                        Select Case contentType
-                            Case "application/pdf" : fileName &= ".pdf"
-                            Case "application/zip" : fileName &= ".zip"
-                            Case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel"
-                                fileName &= ".xlsx"
-                            Case "image/png" : fileName &= ".png"
-                            Case "image/jpeg" : fileName &= ".jpg"
-                            Case Else
-                                ' try to infer extension from subtype
-                                If Not String.IsNullOrEmpty(contentType) AndAlso contentType.Contains("/"c) Then
-                                    Dim parts As String() = contentType.Split("/"c)
-                                    If parts.Length = 2 Then
-                                        fileName &= "." & parts(1)
-                                    End If
-                                End If
-                        End Select
+                    If contentDisposition IsNot Nothing AndAlso Not String.IsNullOrEmpty(contentDisposition.FileName) Then
+                        isFile = True
+                        fileName = contentDisposition.FileName.Trim(""""c)
+                    ElseIf Not String.IsNullOrEmpty(contentType) AndAlso
+                            Not contentType.StartsWith("text", StringComparison.OrdinalIgnoreCase) AndAlso
+                            Not contentType.Contains("json") AndAlso
+                            Not contentType.Contains("xml") AndAlso
+                            Not contentType.Contains("html") Then
+                        isFile = True
                     End If
 
-                    Dim desktop As String = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
-                    Dim tmp As String = Path.Combine(desktop, fileName)
-                    File.WriteAllBytes(tmp, bytes)
-                    Return tmp
-                Else
-                    Return Await respContent.ReadAsStringAsync()
-                End If
+                    If isFile Then
+                        Return Await DownloadFile(fileName, contentType, respContent)
+                    Else
+                        Return Await respContent.ReadAsStringAsync()
+                    End If
+                End Using
             End If
         End Using
 
         Return String.Empty
     End Function
+    Private Async Function DownloadFile(fileName As String, contentType As String, respContent As HttpContent) As Task(Of String)
+        Dim bytes As Byte() = Await respContent.ReadAsByteArrayAsync()
+        If String.IsNullOrEmpty(fileName) Then
+            fileName = "download_" & DateTime.Now.ToString("yyyyMMddHHmmss")
+            Select Case contentType
+                Case "application/pdf" : fileName &= ".pdf"
+                Case "application/zip" : fileName &= ".zip"
+                Case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel"
+                    fileName &= ".xlsx"
+                Case "image/png" : fileName &= ".png"
+                Case "image/jpeg" : fileName &= ".jpg"
+                Case Else
+                    ' try to infer extension from subtype
+                    If Not String.IsNullOrEmpty(contentType) AndAlso contentType.Contains("/"c) Then
+                        Dim parts As String() = contentType.Split("/"c)
+                        If parts.Length = 2 Then
+                            fileName &= "." & parts(1)
+                        End If
+                    End If
+            End Select
+        End If
+
+        Dim desktop As String = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
+        Dim tmp As String = Path.Combine(desktop, fileName)
+        File.WriteAllBytes(tmp, bytes)
+
+        Return tmp
+    End Function
 
     Public Sub Dispose() Implements IDisposable.Dispose
         _httpClient?.Dispose()
+        _handler?.Dispose()
         GC.SuppressFinalize(Me)
     End Sub
 End Class
