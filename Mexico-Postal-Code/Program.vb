@@ -6,19 +6,18 @@ Imports System.IO
 Imports Mexico_Postal_Code.c_Functions
 
 Module Program
-    Property DesktopPath As String = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
 
     Sub Main()
         ' # Note: En vb.net no se puede usar async main
 
         Dim downloadPath As String = DownloadPostalCodes().GetAwaiter().GetResult()
-        Dim txtFile As String = ExtractZip($"{DesktopPath}\CPdescargatxt.zip",
-                                           $"{DesktopPath}\postal_codes\")
+        Dim txtFile As String = ExtractZip($"{WorkingDirectory}\CPdescargatxt.zip",
+                                           $"{WorkingDirectory}\postal_codes\")
 
-        ParseTextFile($"{DesktopPath}\postal_codes\CPdescarga.txt")
+        Dim list As List(Of c_PostalCode) = ParseTextFile($"{WorkingDirectory}\postal_codes\CPdescarga.txt")
         Stop
     End Sub
-    Public Function ParseTextFile(filePath As String) As Boolean
+    Public Function ParseTextFile(filePath As String) As List(Of c_PostalCode)
         ' response headers | Content-Type:Text/ html; charset=iso-8859-1 (Latin-1)
         Dim lines As String() = File.ReadAllLines(filePath, Text.Encoding.Latin1)
 
@@ -41,7 +40,7 @@ Module Program
             l_postalCodes.Add(postalCode)
         Next
 
-        Return True
+        Return l_postalCodes
     End Function
 
     Public Async Function DownloadPostalCodes() As Task(Of String)

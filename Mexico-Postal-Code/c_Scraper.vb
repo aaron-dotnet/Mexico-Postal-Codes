@@ -119,8 +119,10 @@ Public Class c_Scraper
             End Select
         End If
 
-        Dim desktop As String = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
-        Dim tmp As String = Path.Combine(desktop, fileName)
+        Dim tmp As String = Path.Combine(c_Functions.WorkingDirectory, fileName)
+        If File.Exists(tmp) Then
+            File.Delete(tmp)
+        End If
         File.WriteAllBytes(tmp, bytes)
 
         Return tmp
