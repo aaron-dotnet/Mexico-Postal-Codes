@@ -11,11 +11,15 @@ Module Program
         ' # Note: En vb.net no se puede usar async main
 
         Dim downloadPath As String = DownloadPostalCodes().GetAwaiter().GetResult()
-        Dim txtFile As String = ExtractZip($"{WorkingDirectory}\CPdescargatxt.zip",
-                                           $"{WorkingDirectory}\postal_codes\")
+        Dim txtFile As String = ExtractZip(Path.Combine($"{WorkingDirectory}", "CPdescargatxt.zip"),
+                                           Path.Combine($"{WorkingDirectory}", "postal_codes"))
 
-        Dim list As List(Of c_PostalCode) = ParseTextFile($"{WorkingDirectory}\postal_codes\CPdescarga.txt")
-        Stop
+        Dim mylist As List(Of c_PostalCode) = ParseTextFile(Path.Combine($"{WorkingDirectory}", "postal_codes", "CPdescarga.txt"))
+        Dim i As Integer = 1
+        While i < 10
+            Console.WriteLine(mylist(i).CodigoPostal & " " & mylist(i).Asentamiento)
+            i += 1
+        End While
     End Sub
     Public Function ParseTextFile(filePath As String) As List(Of c_PostalCode)
         ' response headers | Content-Type:Text/ html; charset=iso-8859-1 (Latin-1)
