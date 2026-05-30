@@ -26,13 +26,14 @@ Public Class c_Scraper
     End Sub
 
     Private Sub SetHeaders()
-        Dim firefoxVersion As String = "146.0"
+        Dim version As String = "149.0"
+        '
 
         With _httpClient.DefaultRequestHeaders
-            .Add("User-Agent", $"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:{firefoxVersion}) Gecko/20100101 Firefox/{firefoxVersion}")
+            .Add("User-Agent", $"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{version}.0.0.0 Safari/537.36")
             .Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-            .Add("Accept-Language", "en-US,en;q=0.5")
-            .Add("Accept-Encoding", "gzip, deflate, br, zstd")
+            .Add("Accept-Language", "es-MX,es;q=0.9,en-US;q=0.8,en;q=0.7")
+            .Add("Accept-Encoding", "gzip,deflate,br,zstd")
             .Add("Connection", "keep-alive")
             If Not String.IsNullOrEmpty(Origin) Then
                 .Add("Origin", Origin)
@@ -131,6 +132,7 @@ Public Class c_Scraper
     Public Sub Dispose() Implements IDisposable.Dispose
         _httpClient?.Dispose()
         _handler?.Dispose()
+        _cookieContainer = Nothing
         GC.SuppressFinalize(Me)
     End Sub
 End Class

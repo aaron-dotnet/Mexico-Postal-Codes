@@ -28,9 +28,9 @@ Public MustInherit Class c_Functions
             dir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
         Else
             ' Unix Systems
-            ' $HOME/.config/
+            ' $HOME/.local/share/
             dir = Path.Combine(Environment.GetFolderPath(
-                               Environment.SpecialFolder.UserProfile), ".config")
+                               Environment.SpecialFolder.UserProfile), ".local/share")
         End If
 
         workingDir = Path.Combine(dir, "MexicoPostalCodes")
