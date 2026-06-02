@@ -8,4 +8,12 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="0.55.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mexico-Postal-Codes.Core\Mexico-Postal-Codes.Core.vbproj" />
+  </ItemGroup>
+
 </Project>

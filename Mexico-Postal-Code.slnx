@@ -3,4 +3,5 @@
     <File Path=".editorconfig" />
   </Folder>
   <Project Path="Mexico-Postal-Code/Mexico-Postal-Code.vbproj" />
+  <Project Path="Mexico-Postal-Codes.Core/Mexico-Postal-Codes.Core.vbproj" />
 </Solution>
