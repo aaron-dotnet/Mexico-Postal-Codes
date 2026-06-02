@@ -5,7 +5,7 @@ Imports System.IO
 Imports System.IO.Compression
 Imports System.Text
 
-Public NotInheritable Class ZipExtractor
+Friend NotInheritable Class ZipExtractor
     Public Shared Function ExtractZip(ByVal zipPath As String,
                                       ByVal extractPath As String,
                                       Optional ByVal logger As ILogger = Nothing) As String

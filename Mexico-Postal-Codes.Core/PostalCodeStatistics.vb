@@ -13,9 +13,6 @@ Public Class PostalCodeStatistics
     Public ReadOnly Property TopStates As IReadOnlyList(Of KeyValuePair(Of String, Integer))
     Public ReadOnly Property TopSettlementTypes As IReadOnlyList(Of KeyValuePair(Of String, Integer))
 
-    Protected Sub New()
-    End Sub
-
     Public Shared Function Compute(ByVal postalCodes As IEnumerable(Of c_PostalCode),
                                    Optional ByVal topCount As Integer = 10) As PostalCodeStatistics
 

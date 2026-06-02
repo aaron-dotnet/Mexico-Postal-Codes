@@ -5,7 +5,7 @@ Imports System.Collections.Generic
 Imports System.IO
 Imports System.Text
 
-Public NotInheritable Class PostalCodeParser
+Friend NotInheritable Class PostalCodeParser
 
     Private Const FieldSeparator As Char = "|"c
     Public Shared Function Parse(ByVal filePath As String,

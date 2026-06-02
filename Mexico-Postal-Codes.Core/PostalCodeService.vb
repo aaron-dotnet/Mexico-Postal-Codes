@@ -12,8 +12,8 @@ Public NotInheritable Class PostalCodeService
     Public Const SepomexRefererInitial As String = "https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx"
     Public Const SepomexRefererExport As String = "https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/CodigoPostal_Exportar.aspx"
     Public Const SepomexOrigin As String = "https://www.correosdemexico.gob.mx"
-    Public Const DatabaseDirectoryName As String = "postal_codes"
-    Public Const DatabaseFileName As String = "CPdescarga.txt"
+    Private Const DatabaseDirectoryName As String = "postal_codes"
+    Private Const DatabaseFileName As String = "CPdescarga.txt"
 
     Private ReadOnly _logger As ILogger
     Private ReadOnly _workingDir As String
@@ -109,15 +109,14 @@ Public NotInheritable Class PostalCodeService
 
             Dim formSection As String = HtmlHelper.GetString(response,
                                                              startIn:="<input type=""hidden"" name=""__EVENTTARGET""",
-                                                             endTo:="<nav class=""navbar",
-                                                             firstCoincidence:=True)
+                                                             endTo:="<nav class=""navbar")
             If String.IsNullOrEmpty(formSection) Then
                 _logger.Log("Could not locate ASP.NET form fields in SEPOMEX page.", LogLevel.[Error])
                 Return String.Empty
             End If
 
             Dim coordinates As (X As Integer, Y As Integer) = HtmlHelper.GenerateButtonCoordinates(_random)
-            Dim postData As String = HtmlHelper.BuildSepomexPostData(formSection, "txt", coordinates)
+            Dim postData As String = HtmlHelper.BuildSepomexPostData(formSection, coordinates)
 
             scraper.Origin = SepomexOrigin
             scraper.Referer = SepomexRefererExport

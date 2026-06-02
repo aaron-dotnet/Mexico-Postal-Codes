@@ -8,7 +8,7 @@ Imports System.Net.Http.Headers
 Imports System.Text
 Imports System.Threading.Tasks
 
-Public Class c_Scraper
+Friend Class c_Scraper
     Implements IDisposable
 
     Private ReadOnly _handler As HttpClientHandler
@@ -109,22 +109,17 @@ Public Class c_Scraper
                     Using respContent As HttpContent = response.Content
                         Dim contentDisposition As ContentDispositionHeaderValue = respContent.Headers.ContentDisposition
                         Dim contentType As String = If(respContent.Headers.ContentType?.MediaType, String.Empty)
-                        Dim isFile As Boolean = False
-                        Dim fileName As String = Nothing
 
-                        If contentDisposition IsNot Nothing AndAlso Not String.IsNullOrEmpty(contentDisposition.FileName) Then
-                            isFile = True
-                            fileName = contentDisposition.FileName.Trim(""""c)
-                        ElseIf Not String.IsNullOrEmpty(contentType) AndAlso
-                                Not contentType.StartsWith("text", StringComparison.OrdinalIgnoreCase) AndAlso
-                                Not contentType.Contains("json") AndAlso
-                                Not contentType.Contains("xml") AndAlso
-                                Not contentType.Contains("html") Then
-                            isFile = True
-                        End If
-
-                        If isFile Then
+                        ' SEPOMEX always replies with Content-Disposition. The application/*
+                        ' fallback covers the rare case where the header is absent but the
+                        ' body is still a binary download.
+                        If contentDisposition IsNot Nothing AndAlso
+                           Not String.IsNullOrEmpty(contentDisposition.FileName) Then
+                            Dim fileName As String = contentDisposition.FileName.Trim(""""c)
                             Return Await DownloadFileAsync(fileName, contentType, respContent).ConfigureAwait(False)
+                        ElseIf contentType IsNot Nothing AndAlso
+                               contentType.StartsWith("application", StringComparison.OrdinalIgnoreCase) Then
+                            Return Await DownloadFileAsync(Nothing, contentType, respContent).ConfigureAwait(False)
                         Else
                             Return Await respContent.ReadAsStringAsync().ConfigureAwait(False)
                         End If
@@ -147,26 +142,16 @@ Public Class c_Scraper
 
         If String.IsNullOrEmpty(fileName) Then
             fileName = "download_" & DateTime.Now.ToString("yyyyMMddHHmmss")
-            Select Case contentType
-                Case "application/pdf"
-                    fileName &= ".pdf"
-                Case "application/zip"
-                    fileName &= ".zip"
-                Case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                     "application/vnd.ms-excel"
-                    fileName &= ".xlsx"
-                Case "image/png"
-                    fileName &= ".png"
-                Case "image/jpeg"
-                    fileName &= ".jpg"
-                Case Else
-                    If Not String.IsNullOrEmpty(contentType) AndAlso contentType.Contains("/"c) Then
-                        Dim parts As String() = contentType.Split("/"c)
-                        If parts.Length = 2 Then
-                            fileName &= "." & parts(1)
-                        End If
-                    End If
-            End Select
+            ' Only ZIP is expected from SEPOMEX, but fall back to the
+            ' subtype extension for any other application/* response.
+            If contentType = "application/zip" Then
+                fileName &= ".zip"
+            ElseIf Not String.IsNullOrEmpty(contentType) AndAlso contentType.Contains("/"c) Then
+                Dim parts As String() = contentType.Split("/"c)
+                If parts.Length = 2 Then
+                    fileName &= "." & parts(1)
+                End If
+            End If
         End If
 
         Dim target As String = Path.Combine(_workingDirectory, fileName)

@@ -16,7 +16,7 @@ Public Interface ILogger
     Sub Log(ByVal message As String, ByVal level As LogLevel)
 End Interface
 
-Public NotInheritable Class NullLogger
+Friend NotInheritable Class NullLogger
     Implements ILogger
 
     Public Shared ReadOnly Instance As New NullLogger()

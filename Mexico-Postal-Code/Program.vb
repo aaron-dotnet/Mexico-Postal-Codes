@@ -4,7 +4,6 @@ Option Infer Off
 Imports System.Collections.Generic
 Imports System.IO
 Imports System.Linq
-Imports System.Text
 Imports Spectre.Console
 Imports Mexico_Postal_Code.Core
 

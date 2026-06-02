@@ -3,11 +3,10 @@ Option Infer Off
 
 Imports System.Net
 
-Public NotInheritable Class HtmlHelper
+Friend NotInheritable Class HtmlHelper
     Public Shared Function GetString(ByVal source As String,
                                      ByVal startIn As String, ByVal endTo As String,
-                                     Optional ByVal excessAmount As Integer = 0,
-                                     Optional ByVal firstCoincidence As Boolean = False) As String
+                                     Optional ByVal excessAmount As Integer = 0) As String
 
         If String.IsNullOrEmpty(source) OrElse
             String.IsNullOrEmpty(startIn) OrElse
@@ -19,21 +18,10 @@ Public NotInheritable Class HtmlHelper
         If startIdx = -1 Then Return String.Empty
 
         Dim searchStartForEnd As Integer = startIdx + startIn.Length
-        Dim endIdx As Integer
-
-        If firstCoincidence Then
-            endIdx = source.IndexOf(endTo, searchStartForEnd, StringComparison.OrdinalIgnoreCase)
-        Else
-            Dim count As Integer = source.Length - searchStartForEnd
-            If count <= 0 Then Return String.Empty
-
-            endIdx = source.LastIndexOf(endTo, source.Length - 1, count, StringComparison.OrdinalIgnoreCase)
-        End If
-
+        Dim endIdx As Integer = source.IndexOf(endTo, searchStartForEnd, StringComparison.OrdinalIgnoreCase)
         If endIdx = -1 Then Return String.Empty
 
         Dim resultLength As Integer = (endIdx - startIdx) + endTo.Length - Math.Max(0, excessAmount)
-
         If resultLength <= 0 Then Return String.Empty
 
         If startIdx + resultLength > source.Length Then
@@ -42,14 +30,13 @@ Public NotInheritable Class HtmlHelper
 
         Return source.Substring(startIdx, resultLength)
     End Function
+
     Public Shared Function GetInputValue(ByVal fullString As String, ByVal id As String) As String
         If String.IsNullOrEmpty(fullString) OrElse String.IsNullOrEmpty(id) Then Return String.Empty
 
         Dim start As String = $"{id}"" value="""
         Dim [end] As String = """ />"
-        Dim raw As String = GetString(fullString, start, [end],
-                                      excessAmount:=[end].Length,
-                                      firstCoincidence:=True)
+        Dim raw As String = GetString(fullString, start, [end], excessAmount:=[end].Length)
         If String.IsNullOrEmpty(raw) Then Return String.Empty
 
         raw = raw.Replace(start, String.Empty)
@@ -57,7 +44,6 @@ Public NotInheritable Class HtmlHelper
     End Function
 
     Public Shared Function BuildSepomexPostData(ByVal htmlContent As String,
-                                                ByVal fileType As String,
                                                 ByVal buttonCoordinates As (X As Integer, Y As Integer)) As String
 
         Return $"__EVENTTARGET={GetInputValue(htmlContent, "__EVENTTARGET")}&" &
@@ -67,7 +53,7 @@ Public NotInheritable Class HtmlHelper
             $"__VIEWSTATEGENERATOR={GetInputValue(htmlContent, "__VIEWSTATEGENERATOR")}&" &
             $"__EVENTVALIDATION={GetInputValue(htmlContent, "__EVENTVALIDATION")}&" &
             $"cboEdo=00&" &
-            $"rblTipo={fileType}&" &
+            $"rblTipo=txt&" &
             $"btnDescarga.x={buttonCoordinates.X}&" &
             $"btnDescarga.y={buttonCoordinates.Y}"
     End Function
