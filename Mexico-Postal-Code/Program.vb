@@ -1,21 +1,22 @@
 Option Strict On
 Option Infer Off
 
-Imports System.Text
+Imports System.Collections.Generic
 Imports System.IO
 Imports System.Linq
-Imports System.Collections.Generic
-Imports System.Threading.Tasks
+Imports System.Text
 Imports Spectre.Console
-Imports Mexico_Postal_Code.c_Functions
+Imports Mexico_Postal_Code.Core
 
 Module Program
 
     Sub Main()
+        ConfigureLogger()
         ConfigureConsole()
         ShowWelcomeHeader()
 
-        Dim postalCodes As List(Of c_PostalCode) = LoadOrDownloadDatabase()
+        Dim service As New PostalCodeService()
+        Dim postalCodes As List(Of c_PostalCode) = service.LoadOrDownload()
 
         If postalCodes.Count = 0 Then
             AnsiConsole.MarkupLine("[bold red]Failed to load any postal codes. Please check your internet connection or logs.[/]")
@@ -24,7 +25,12 @@ Module Program
             Return
         End If
 
-        RunMainLoop(postalCodes)
+        RunMainLoop(service, postalCodes)
+    End Sub
+
+    Private Sub ConfigureLogger()
+        Dim logFile As String = Path.Combine(AppContext.WorkingDirectory, "MexicoPostalCodes.log")
+        AppContext.Logger = New FileLogger(logFile)
     End Sub
 
     Private Sub ConfigureConsole()
@@ -46,30 +52,7 @@ Module Program
         )
     End Sub
 
-    Private Function LoadOrDownloadDatabase() As List(Of c_PostalCode)
-        Dim postalCodes As List(Of c_PostalCode) = New List(Of c_PostalCode)()
-        Dim dbPath As String = Path.Combine(WorkingDirectory, "postal_codes", "CPdescarga.txt")
-
-        If Not File.Exists(dbPath) Then
-            AnsiConsole.MarkupLine("[yellow]Database not found locally. Starting automatic download...[/]")
-            postalCodes = RunDownloadAndParseFlow()
-        Else
-            Try
-                AnsiConsole.Status().Start("Loading local postal codes database...",
-                                           Sub(ctx As StatusContext)
-                                               postalCodes = ParseTextFile(dbPath)
-                                           End Sub)
-                AnsiConsole.MarkupLine($"[green]Loaded {postalCodes.Count:N0} postal codes from local cache.[/]")
-            Catch ex As Exception
-                AnsiConsole.MarkupLine("[red]Error loading database from local cache. Retrying with download...[/]")
-                postalCodes = RunDownloadAndParseFlow()
-            End Try
-        End If
-
-        Return postalCodes
-    End Function
-
-    Private Sub RunMainLoop(ByRef postalCodes As List(Of c_PostalCode))
+    Private Sub RunMainLoop(ByVal service As PostalCodeService, ByRef postalCodes As List(Of c_PostalCode))
         Dim exitApp As Boolean = False
         Dim choices As String() = New String() {
             "Search & Browse Postal Codes",
@@ -92,7 +75,7 @@ Module Program
                     ExportDataset(postalCodes)
                 Case "Refresh/Re-download Data"
                     If ConfirmChoice("[yellow]Are you sure you want to re-download the database? This might take a few seconds.[/]") Then
-                        postalCodes = RunDownloadAndParseFlow()
+                        postalCodes = service.Refresh()
                     End If
                 Case "Exit"
                     exitApp = True
@@ -101,113 +84,11 @@ Module Program
         End While
     End Sub
 
-    Public Function RunDownloadAndParseFlow() As List(Of c_PostalCode)
-        Dim downloadPath As String = String.Empty
-        Dim txtFile As String = String.Empty
-        Dim mylist As List(Of c_PostalCode) = New List(Of c_PostalCode)()
-
-        Try
-            ' 1. Download
-            AnsiConsole.Status().Start("[bold yellow]Downloading latest postal codes from SEPOMEX...[/]",
-                                       Sub(ctx As StatusContext)
-                                           downloadPath = DownloadPostalCodes().GetAwaiter().GetResult()
-                                       End Sub)
-
-            If String.IsNullOrEmpty(downloadPath) Then
-                AnsiConsole.MarkupLine("[red]Error: Download failed.[/]")
-                Return mylist
-            End If
-
-            ' 2. Extract
-            AnsiConsole.Status().Start("[bold yellow]Extracting zip package...[/]",
-                                       Sub(ctx As StatusContext)
-                                           Dim zipFileToExtract As String = Path.Combine(WorkingDirectory, "CPdescargatxt.zip")
-                                           If Not File.Exists(zipFileToExtract) AndAlso File.Exists(downloadPath) Then
-                                               zipFileToExtract = downloadPath
-                                           End If
-                                           txtFile = ExtractZip(zipFileToExtract, Path.Combine(WorkingDirectory, "postal_codes"))
-                                       End Sub)
-
-            If String.IsNullOrEmpty(txtFile) OrElse Not File.Exists(txtFile) Then
-                AnsiConsole.MarkupLine("[red]Error: Extraction failed.[/]")
-                Return mylist
-            End If
-
-            ' 3. Parse
-            AnsiConsole.Status().Start("[bold yellow]Parsing postal codes dataset...[/]",
-                                       Sub(ctx As StatusContext)
-                                           mylist = ParseTextFile(txtFile)
-                                       End Sub)
-
-            AnsiConsole.MarkupLine($"[bold green]✓ Successfully downloaded and parsed {mylist.Count:N0} postal codes![/]")
-
-        Catch ex As Exception
-            AnsiConsole.MarkupLine("[red]An error occurred during download/parse flow:[/]")
-            AnsiConsole.WriteException(ex)
-        End Try
-
-        Return mylist
-    End Function
-
-    Public Function ParseTextFile(filePath As String) As List(Of c_PostalCode)
-        Dim l_postalCodes As List(Of c_PostalCode) = New List(Of c_PostalCode)()
-        If Not File.Exists(filePath) Then
-            Return l_postalCodes
-        End If
-
-        Try
-            ' Use Latin1 (iso-8859-1) encoding as specified in the original code
-            Using reader As New StreamReader(filePath, Encoding.Latin1)
-                ' Skip first two lines (metadata and headers)
-                Dim header1 As String = reader.ReadLine()
-                Dim header2 As String = reader.ReadLine()
-                If header1 Is Nothing OrElse header2 Is Nothing Then
-                    Return l_postalCodes
-                End If
-
-                While Not reader.EndOfStream
-                    Dim line As String = reader.ReadLine()
-                    If String.IsNullOrWhiteSpace(line) Then Continue While
-
-                    Dim fields As String() = line.Split("|"c)
-                    If fields.Length >= 6 Then
-                        Dim postalCode As New c_PostalCode()
-                        With postalCode
-                            .CodigoPostal = fields(0)
-                            .Asentamiento = fields(1)
-                            .TipoAsentamiento = fields(2)
-                            .Municipio = fields(3)
-                            .Estado = fields(4)
-                            .Ciudad = fields(5)
-                            If fields.Length >= 15 Then
-                                .D_CP = fields(6)
-                                .c_Estado = fields(7)
-                                .c_Oficina = fields(8)
-                                .c_CP = fields(9)
-                                .c_TipoAsentamiento = fields(10)
-                                .c_Municipio = fields(11)
-                                .id_Asentamiento_cpcons = fields(12)
-                                .d_zona = fields(13)
-                                .c_cve_ciudad = fields(14)
-                            End If
-                        End With
-                        l_postalCodes.Add(postalCode)
-                    End If
-                End While
-            End Using
-        Catch ex As Exception
-            Log("Error parsing postal codes text file: " & ex.Message, LogLevel.Error)
-            Throw
-        End Try
-
-        Return l_postalCodes
-    End Function
-
     Private Sub BrowsePostalCodes(postalCodes As List(Of c_PostalCode))
         Dim searchAgain As Boolean = True
         While searchAgain
             Dim query As String = PromptSearchQuery()
-            Dim filtered As List(Of c_PostalCode) = FilterPostalCodes(postalCodes, query)
+            Dim filtered As List(Of c_PostalCode) = PostalCodeQuery.Search(postalCodes, query)
 
             If filtered.Count = 0 Then
                 AnsiConsole.MarkupLine("[red]No postal codes found matching the query.[/]")
@@ -238,30 +119,10 @@ Module Program
         Return query
     End Function
 
-    Private Function FilterPostalCodes(postalCodes As List(Of c_PostalCode), query As String) As List(Of c_PostalCode)
-        If String.IsNullOrWhiteSpace(query) Then
-            Return postalCodes
-        End If
-
-        Dim trimmedQuery As String = query.Trim()
-        Dim filtered As New List(Of c_PostalCode)()
-
-        For Each p As c_PostalCode In postalCodes
-            If (p.CodigoPostal IsNot Nothing AndAlso p.CodigoPostal.Contains(trimmedQuery, StringComparison.OrdinalIgnoreCase)) OrElse
-               (p.Asentamiento IsNot Nothing AndAlso p.Asentamiento.Contains(trimmedQuery, StringComparison.OrdinalIgnoreCase)) OrElse
-               (p.Municipio IsNot Nothing AndAlso p.Municipio.Contains(trimmedQuery, StringComparison.OrdinalIgnoreCase)) OrElse
-               (p.Estado IsNot Nothing AndAlso p.Estado.Contains(trimmedQuery, StringComparison.OrdinalIgnoreCase)) Then
-                filtered.Add(p)
-            End If
-        Next
-
-        Return filtered
-    End Function
-
-    Private Function PaginateAndDisplayResults(filtered As List(Of c_PostalCode), query As String) As Boolean
+    Private Function PaginateAndDisplayResults(ByVal filtered As List(Of c_PostalCode), ByVal query As String) As Boolean
         Dim pageSize As Integer = 15
         Dim pageIndex As Integer = 0
-        Dim totalPages As Integer = CInt(Math.Ceiling(filtered.Count / pageSize))
+        Dim totalPages As Integer = CInt(Math.Ceiling(filtered.Count / CDbl(pageSize)))
         Dim stayInPagination As Boolean = True
         Dim searchAgain As Boolean = True
 
@@ -273,7 +134,7 @@ Module Program
 
             RenderResultsTable(filtered, pageIndex, pageSize)
 
-            Dim choices As List(Of String) = New List(Of String)()
+            Dim choices As New List(Of String)()
             If pageIndex < totalPages - 1 Then choices.Add("Next Page")
             If pageIndex > 0 Then choices.Add("Previous Page")
             choices.Add("New Search")
@@ -297,7 +158,7 @@ Module Program
         Return searchAgain
     End Function
 
-    Private Sub RenderResultsTable(filtered As List(Of c_PostalCode), pageIndex As Integer, pageSize As Integer)
+    Private Sub RenderResultsTable(ByVal filtered As List(Of c_PostalCode), ByVal pageIndex As Integer, ByVal pageSize As Integer)
         Dim table As New Table()
         table.Border = TableBorder.Rounded
         table.AddColumn("[bold blue]CP[/]")
@@ -314,9 +175,9 @@ Module Program
             Dim p As c_PostalCode = filtered(idx)
             table.AddRow(
                 If(p.CodigoPostal, String.Empty),
-                If(p.Asentamiento, String.Empty),
-                If(p.TipoAsentamiento, String.Empty),
-                If(p.Municipio, String.Empty),
+                If(FixToPrint(p.Asentamiento), String.Empty),
+                If(FixToPrint(p.TipoAsentamiento), String.Empty),
+                If(FixToPrint(p.Municipio), String.Empty),
                 If(p.Estado, String.Empty),
                 If(p.d_zona, "N/A")
             )
@@ -324,64 +185,39 @@ Module Program
 
         AnsiConsole.Write(table)
     End Sub
+    Private Function FixToPrint(str As String) As String
+        If String.IsNullOrEmpty(str) Then Return str
 
-    Private Sub ShowStatistics(postalCodes As List(Of c_PostalCode))
+        If str.Contains("[", StringComparison.OrdinalIgnoreCase) Then
+            Return str.Replace("[", "[[").Replace("]", "]]")
+        End If
+
+        Return str
+    End Function
+
+    Private Sub ShowStatistics(ByVal postalCodes As List(Of c_PostalCode))
         AnsiConsole.Clear()
         AnsiConsole.Write(New Rule("[yellow]Database Statistics[/]"))
         AnsiConsole.WriteLine()
 
-        Dim totalCodes As Integer = postalCodes.Count
-
-        ' Calculate distinct metric counts
-        Dim statesHash As New HashSet(Of String)()
-        Dim municipalitiesHash As New HashSet(Of String)()
-        Dim settlementsHash As New HashSet(Of String)()
-
-        For Each p As c_PostalCode In postalCodes
-            If Not String.IsNullOrEmpty(p.Estado) Then statesHash.Add(p.Estado)
-            If Not String.IsNullOrEmpty(p.Municipio) Then municipalitiesHash.Add(p.Municipio)
-            If Not String.IsNullOrEmpty(p.Asentamiento) Then settlementsHash.Add(p.Asentamiento)
-        Next
-
-        RenderOverviewTable(totalCodes, statesHash.Count, municipalitiesHash.Count, settlementsHash.Count)
+        Dim stats As PostalCodeStatistics = PostalCodeStatistics.Compute(postalCodes)
+        RenderOverviewTable(stats)
         AnsiConsole.WriteLine()
 
-        ' Top 10 States
-        Dim stateGroups As Dictionary(Of String, Integer) = postalCodes _
-            .Where(Function(p) Not String.IsNullOrEmpty(p.Estado)) _
-            .GroupBy(Function(p) p.Estado) _
-            .ToDictionary(Function(g) g.Key, Function(g) g.Count())
-
-        Dim sortedStates As List(Of KeyValuePair(Of String, Integer)) = stateGroups _
-            .OrderByDescending(Function(x) x.Value) _
-            .Take(10) _
-            .ToList()
-
-        RenderTopStatesTable(sortedStates, totalCodes)
+        RenderTopStatesTable(stats)
         AnsiConsole.WriteLine()
 
-        RenderDistributionChart(sortedStates)
+        RenderDistributionChart(stats.TopStates.Take(5).ToList())
         AnsiConsole.WriteLine()
 
-        ' Top 10 Settlement Types
-        Dim typeGroups As Dictionary(Of String, Integer) = postalCodes _
-            .Where(Function(p) Not String.IsNullOrEmpty(p.TipoAsentamiento)) _
-            .GroupBy(Function(p) p.TipoAsentamiento) _
-            .ToDictionary(Function(g) g.Key, Function(g) g.Count())
-
-        Dim sortedTypes As List(Of KeyValuePair(Of String, Integer)) = typeGroups _
-            .OrderByDescending(Function(x) x.Value) _
-            .Take(10) _
-            .ToList()
-
-        RenderSettlementTypesTable(sortedTypes, totalCodes)
+        RenderSettlementTypesTable(stats)
         AnsiConsole.WriteLine()
 
         AnsiConsole.MarkupLine("[grey]Press any key to return to main menu...[/]")
         Console.ReadKey(True)
     End Sub
 
-    Private Sub RenderOverviewTable(totalCodes As Integer, statesCount As Integer, municipalitiesCount As Integer, settlementsCount As Integer)
+    Private Sub RenderOverviewTable(ByVal stats As PostalCodeStatistics)
         Dim summaryTable As New Table()
         With summaryTable
             .Border = TableBorder.DoubleEdge
@@ -389,15 +225,15 @@ Module Program
             .AddColumn("[bold blue]Metric[/]")
             .AddColumn("[bold blue]Count[/]")
 
-            .AddRow("Total Postal Records", totalCodes.ToString("N0"))
-            .AddRow("Unique States", statesCount.ToString("N0"))
-            .AddRow("Unique Municipalities", municipalitiesCount.ToString("N0"))
-            .AddRow("Unique Settlement Names", settlementsCount.ToString("N0"))
+            .AddRow("Total Postal Records", stats.TotalRecords.ToString("N0"))
+            .AddRow("Unique States", stats.UniqueStates.ToString("N0"))
+            .AddRow("Unique Municipalities", stats.UniqueMunicipalities.ToString("N0"))
+            .AddRow("Unique Settlement Names", stats.UniqueSettlements.ToString("N0"))
         End With
         AnsiConsole.Write(summaryTable)
     End Sub
 
-    Private Sub RenderTopStatesTable(sortedStates As List(Of KeyValuePair(Of String, Integer)), totalCodes As Integer)
+    Private Sub RenderTopStatesTable(ByVal stats As PostalCodeStatistics)
         Dim statesTable As New Table()
         statesTable.Border = TableBorder.Rounded
         statesTable.Title = New TableTitle("[bold green]Top 10 States by Record Count[/]")
@@ -405,22 +241,21 @@ Module Program
         statesTable.AddColumn("[bold blue]Records[/]")
         statesTable.AddColumn("[bold blue]Percentage[/]")
 
-        For Each s As KeyValuePair(Of String, Integer) In sortedStates
-            Dim percentage As Double = (s.Value / totalCodes) * 100
-            statesTable.AddRow(s.Key, s.Value.ToString("N0"), $"{percentage:F2}%")
+        For Each s As KeyValuePair(Of String, Integer) In stats.TopStates
+            statesTable.AddRow(s.Key, s.Value.ToString("N0"), $"{Percentage(s.Value, stats.TotalRecords):F2}%")
         Next
 
         AnsiConsole.Write(statesTable)
     End Sub
 
-    Private Sub RenderDistributionChart(sortedStates As List(Of KeyValuePair(Of String, Integer)))
+    Private Sub RenderDistributionChart(ByVal items As List(Of KeyValuePair(Of String, Integer)))
         Dim chart As New BarChart()
         chart.Width = 60
         chart.Label = "[bold green]Distribution of Top 5 States[/]"
 
         Dim colors As Color() = {Color.Red, Color.Green, Color.Blue, Color.Yellow, Color.Aqua}
         Dim colorIndex As Integer = 0
-        For Each s As KeyValuePair(Of String, Integer) In sortedStates.Take(5)
+        For Each s As KeyValuePair(Of String, Integer) In items
             chart.AddItem(s.Key, s.Value, colors(colorIndex Mod colors.Length))
             colorIndex += 1
         Next
@@ -428,7 +263,7 @@ Module Program
         AnsiConsole.Write(chart)
     End Sub
 
-    Private Sub RenderSettlementTypesTable(sortedTypes As List(Of KeyValuePair(Of String, Integer)), totalCodes As Integer)
+    Private Sub RenderSettlementTypesTable(ByVal stats As PostalCodeStatistics)
         Dim typesTable As New Table()
         typesTable.Border = TableBorder.Rounded
         typesTable.Title = New TableTitle("[bold green]Top 10 Settlement Types[/]")
@@ -436,15 +271,19 @@ Module Program
         typesTable.AddColumn("[bold blue]Records[/]")
         typesTable.AddColumn("[bold blue]Percentage[/]")
 
-        For Each t As KeyValuePair(Of String, Integer) In sortedTypes
-            Dim percentage As Double = (t.Value / totalCodes) * 100
-            typesTable.AddRow(t.Key, t.Value.ToString("N0"), $"{percentage:F2}%")
+        For Each t As KeyValuePair(Of String, Integer) In stats.TopSettlementTypes
+            typesTable.AddRow(t.Key, t.Value.ToString("N0"), $"{Percentage(t.Value, stats.TotalRecords):F2}%")
         Next
 
         AnsiConsole.Write(typesTable)
     End Sub
 
-    Private Sub ExportDataset(postalCodes As List(Of c_PostalCode))
+    Private Function Percentage(ByVal value As Integer, ByVal total As Integer) As Double
+        If total <= 0 Then Return 0.0
+        Return (value / CDbl(total)) * 100.0
+    End Function
+
+    Private Sub ExportDataset(ByVal postalCodes As List(Of c_PostalCode))
         AnsiConsole.Clear()
         AnsiConsole.Write(New Rule("[yellow]Export Dataset[/]"))
         AnsiConsole.WriteLine()
@@ -459,33 +298,31 @@ Module Program
         Dim format As String = SelectOption("[green]Choose export format:[/]", choices)
         If format = "Cancel" Then Return
 
-        Dim exportDir As String = Path.Combine(WorkingDirectory, "exports")
-        Try
-            Directory.CreateDirectory(exportDir)
-        Catch ex As Exception
-            AnsiConsole.MarkupLine($"[red]Error creating directory {exportDir}: {ex.Message}[/]")
-            Return
-        End Try
-
-        Dim fileName As String = "mexico_postal_codes_" & DateTime.Now.ToString("yyyyMMdd_HHmmss")
+        Dim exporter As New PostalCodeExporter()
         Dim fullPath As String = String.Empty
 
         Try
             Select Case format
                 Case "JSON (Highly detailed, formatted)"
-                    fileName &= ".json"
-                    fullPath = Path.Combine(exportDir, fileName)
-                    ExportToJsonFile(fullPath, postalCodes)
+                    fullPath = exporter.BuildExportPath("json")
+                    AnsiConsole.Status().Start("Serializing dataset to JSON...",
+                                               Sub(ctx As StatusContext)
+                                                   exporter.ExportToJson(postalCodes, fullPath)
+                                               End Sub)
 
                 Case "CSV (Comma Separated Values)"
-                    fileName &= ".csv"
-                    fullPath = Path.Combine(exportDir, fileName)
-                    ExportToCsvFile(fullPath, postalCodes)
+                    fullPath = exporter.BuildExportPath("csv")
+                    AnsiConsole.Status().Start("Serializing dataset to CSV...",
+                                               Sub(ctx As StatusContext)
+                                                   exporter.ExportToCsv(postalCodes, fullPath)
+                                               End Sub)
 
                 Case "XML (Extensible Markup Language)"
-                    fileName &= ".xml"
-                    fullPath = Path.Combine(exportDir, fileName)
-                    ExportToXmlFile(fullPath, postalCodes)
+                    fullPath = exporter.BuildExportPath("xml")
+                    AnsiConsole.Status().Start("Serializing dataset to XML...",
+                                               Sub(ctx As StatusContext)
+                                                   exporter.ExportToXml(postalCodes, fullPath)
+                                               End Sub)
             End Select
 
             AnsiConsole.MarkupLine($"[bold green]✓ Dataset successfully exported to:[/] [cyan]{fullPath}[/]")
@@ -499,141 +336,6 @@ Module Program
         Console.ReadKey(True)
     End Sub
 
-    Private Sub ExportToJsonFile(fullPath As String, postalCodes As List(Of c_PostalCode))
-        AnsiConsole.Status().Start("Serializing dataset to JSON...",
-                                   Sub(ctx As StatusContext)
-                                       Dim options As New Json.JsonSerializerOptions() With {
-                                           .WriteIndented = True,
-                                           .Encoder = Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-                                       }
-                                       Dim jsonString As String = Json.JsonSerializer.Serialize(postalCodes, options)
-                                       File.WriteAllText(fullPath, jsonString, Encoding.UTF8)
-                                   End Sub)
-    End Sub
-
-    Private Sub ExportToCsvFile(fullPath As String, postalCodes As List(Of c_PostalCode))
-        AnsiConsole.Status().Start("Serializing dataset to CSV...",
-                                   Sub(ctx As StatusContext)
-                                       Using writer As New StreamWriter(fullPath, False, Encoding.UTF8)
-                                           writer.WriteLine("CodigoPostal,Asentamiento,TipoAsentamiento,Municipio,Estado,Ciudad,D_CP,c_Estado,c_Oficina,c_CP,c_TipoAsentamiento,c_Municipio,id_Asentamiento_cpcons,d_zona,c_cve_ciudad")
-                                           For Each p As c_PostalCode In postalCodes
-                                               Dim line As String = $"{EscapeCsv(p.CodigoPostal)},{EscapeCsv(p.Asentamiento)},{EscapeCsv(p.TipoAsentamiento)},{EscapeCsv(p.Municipio)},{EscapeCsv(p.Estado)},{EscapeCsv(p.Ciudad)},{EscapeCsv(p.D_CP)},{EscapeCsv(p.c_Estado)},{EscapeCsv(p.c_Oficina)},{EscapeCsv(p.c_CP)},{EscapeCsv(p.c_TipoAsentamiento)},{EscapeCsv(p.c_Municipio)},{EscapeCsv(p.id_Asentamiento_cpcons)},{EscapeCsv(p.d_zona)},{EscapeCsv(p.c_cve_ciudad)}"
-                                               writer.WriteLine(line)
-                                           Next
-                                       End Using
-                                   End Sub)
-    End Sub
-
-    Private Sub ExportToXmlFile(fullPath As String, postalCodes As List(Of c_PostalCode))
-        AnsiConsole.Status().Start("Serializing dataset to XML...",
-                                   Sub(ctx As StatusContext)
-                                       Dim doc As New System.Xml.XmlDocument()
-                                       Dim root As System.Xml.XmlElement = doc.CreateElement("PostalCodes")
-                                       doc.AppendChild(root)
-
-                                       For Each p As c_PostalCode In postalCodes
-                                           Dim el As System.Xml.XmlElement = doc.CreateElement("PostalCode")
-                                           el.SetAttribute("Code", p.CodigoPostal)
-                                           el.SetAttribute("Settlement", p.Asentamiento)
-                                           el.SetAttribute("Type", p.TipoAsentamiento)
-                                           el.SetAttribute("Municipio", p.Municipio)
-                                           el.SetAttribute("State", p.Estado)
-                                           el.SetAttribute("City", p.Ciudad)
-                                           el.SetAttribute("D_CP", p.D_CP)
-                                           el.SetAttribute("c_Estado", p.c_Estado)
-                                           el.SetAttribute("c_Oficina", p.c_Oficina)
-                                           el.SetAttribute("c_CP", p.c_CP)
-                                           el.SetAttribute("c_TipoAsentamiento", p.c_TipoAsentamiento)
-                                           el.SetAttribute("c_Municipio", p.c_Municipio)
-                                           el.SetAttribute("id_Asentamiento_cpcons", p.id_Asentamiento_cpcons)
-                                           el.SetAttribute("d_zona", p.d_zona)
-                                           el.SetAttribute("c_cve_ciudad", p.c_cve_ciudad)
-                                           root.AppendChild(el)
-                                       Next
-                                       doc.Save(fullPath)
-                                   End Sub)
-    End Sub
-
-    Private Function EscapeCsv(value As String) As String
-        If String.IsNullOrEmpty(value) Then Return String.Empty
-        If value.Contains(","c) OrElse value.Contains(""""c) OrElse value.Contains(Environment.NewLine) Then
-            Return $"""{value.Replace("""", """""")}"""
-        End If
-        Return value
-    End Function
-
-    Public Function DownloadPostalCodes() As Task(Of String)
-        Dim mainUrl As String = "https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/CodigoPostal_Exportar.aspx"
-        Dim host As String = "www.correosdemexico.gob.mx"
-
-        Dim downloadTask As Task(Of String) = Task.Run(
-            Async Function() As Task(Of String)
-                Using scraper As New c_Scraper()
-                    scraper.Host = host
-                    scraper.Referer = "https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/Descarga.aspx"
-
-                    ' # Primera interacción con la página para obtener los datos necesarios para el Post
-                    Dim response As String = Await scraper.Get(mainUrl)
-                    Dim necessaryData As String = GetString(response,
-                                                            startStr:="<input type=""hidden"" name=""__EVENTTARGET""",
-                                                            endStr:="<nav class=""navbar",
-                                                            firstCoincidence:=True)
-
-                    Dim postData As String = BuildPostData(necessaryData)
-
-                    scraper.Origin = "https://www.correosdemexico.gob.mx"
-                    scraper.Referer = "https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/CodigoPostal_Exportar.aspx"
-
-                    ' # Segunda interacción, mandamos petición post con la data para descargar el archivo
-                    Dim filePath As String = Await scraper.Post(mainUrl, postData)
-                    Return filePath
-                End Using
-            End Function)
-
-        Return downloadTask
-    End Function
-
-    Public Function BuildPostData(ByRef htmlContent As String) As String
-        Dim coor As (x_pos As Integer, y_pos As Integer) = GenerateCoordinates()
-        Dim fileType As String = "txt"
-
-        Dim post As String =
-            $"__EVENTTARGET={GetInputValue(htmlContent, "__EVENTTARGET")}&" &
-            $"__EVENTARGUMENT={GetInputValue(htmlContent, "__EVENTARGUMENT")}&" &
-            $"__LASTFOCUS={GetInputValue(htmlContent, "__LASTFOCUS")}&" &
-            $"__VIEWSTATE={GetInputValue(htmlContent, "__VIEWSTATE")}&" &
-            $"__VIEWSTATEGENERATOR={GetInputValue(htmlContent, "__VIEWSTATEGENERATOR")}&" &
-            $"__EVENTVALIDATION={GetInputValue(htmlContent, "__EVENTVALIDATION")}&" &
-            $"cboEdo=00&" &
-            $"rblTipo={fileType}&" &
-            $"btnDescarga.x={coor.x_pos}&" &
-            $"btnDescarga.y={coor.y_pos}"
-
-        Return post
-    End Function
-
-    Public Function GetInputValue(ByRef fullString As String, id As String) As String
-        Dim start As String = $"{id}"" value="""
-        Dim [end] As String = """ />"
-        Dim result As String = GetString(fullString, start, [end],
-                                         excessAmount:=[end].Length,
-                                         firstCoincidence:=True).
-                                         Replace(start, String.Empty)
-        If String.IsNullOrEmpty(result) Then
-            Return String.Empty
-        End If
-
-        Return System.Net.WebUtility.UrlEncode(result)
-    End Function
-
-    Public Function GenerateCoordinates() As (x_pos As Integer, y_pos As Integer)
-        Dim generator As New Random()
-        Dim yPos As Integer = generator.Next(2, 22)
-        Dim xPos As Integer = generator.Next(2, 72)
-
-        Return (xPos, yPos)
-    End Function
-
     Private Sub DrainInputBuffer()
         Try
             While Console.KeyAvailable
@@ -645,7 +347,7 @@ Module Program
     End Sub
 
     ' Graceful fallback methods for non-interactive environments
-    Private Function SelectOption(title As String, choices As String()) As String
+    Private Function SelectOption(ByVal title As String, ByVal choices As String()) As String
         Try
             If AnsiConsole.Profile.Capabilities.Interactive Then
                 Dim menuPrompt As New SelectionPrompt(Of String)()
@@ -680,7 +382,7 @@ Module Program
         Return String.Empty
     End Function
 
-    Private Function ConfirmChoice(promptText As String) As Boolean
+    Private Function ConfirmChoice(ByVal promptText As String) As Boolean
         Try
             If AnsiConsole.Profile.Capabilities.Interactive Then
                 Return AnsiConsole.Confirm(promptText)

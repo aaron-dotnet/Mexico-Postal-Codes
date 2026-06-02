@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Mexico_Postal_Code.Core</RootNamespace>
+    <AssemblyName>Mexico-Postal-Codes.Core</AssemblyName>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <OptionStrict>On</OptionStrict>
+    <OptionInfer>Off</OptionInfer>
+    <OptionExplicit>On</OptionExplicit>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <GenerateAssemblyFileInfoAttribute>false</GenerateAssemblyFileInfoAttribute>
+    <NeutralLanguage>en</NeutralLanguage>
+    <UseApplicationFramework>False</UseApplicationFramework>
+  </PropertyGroup>
+
+</Project>

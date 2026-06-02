@@ -1,3 +1,6 @@
+Option Strict On
+Option Infer Off
+
 Public Class c_PostalCode
     Public Property CodigoPostal As String      'postal code
     Public Property Asentamiento As String      'settlement
