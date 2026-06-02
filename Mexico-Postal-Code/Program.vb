@@ -16,7 +16,7 @@ Module Program
         ShowWelcomeHeader()
 
         Dim service As New PostalCodeService()
-        Dim postalCodes As List(Of c_PostalCode) = service.LoadOrDownload()
+        Dim postalCodes As List(Of c_PostalCode) = LoadWithStatus(service, "Loading postal codes database...")
 
         If postalCodes.Count = 0 Then
             AnsiConsole.MarkupLine("[bold red]Failed to load any postal codes. Please check your internet connection or logs.[/]")
@@ -27,6 +27,37 @@ Module Program
 
         RunMainLoop(service, postalCodes)
     End Sub
+
+    Private Function LoadWithStatus(ByVal service As PostalCodeService, ByVal statusMessage As String) As List(Of c_PostalCode)
+        Dim result As List(Of c_PostalCode) = New List(Of c_PostalCode)()
+        AnsiConsole.Status().Start(statusMessage,
+                                   Sub(ctx As StatusContext)
+                                       result = service.LoadOrDownload()
+                                   End Sub)
+        AnsiConsole.MarkupLine($"[green]Loaded {result.Count:N0} postal codes.[/]")
+        Return result
+    End Function
+
+    Private Function RefreshWithStatus(ByVal service As PostalCodeService, ByVal previousData As List(Of c_PostalCode)) As List(Of c_PostalCode)
+        Dim result As List(Of c_PostalCode) = New List(Of c_PostalCode)()
+        AnsiConsole.Status().Start("[bold yellow]Re-downloading database from SEPOMEX...[/]",
+                                   Sub(ctx As StatusContext)
+                                       result = service.Refresh()
+                                   End Sub)
+
+        If result.Count = 0 Then
+            AnsiConsole.MarkupLine("[bold red]Re-download failed. The database could not be updated. Check the logs for details.[/]")
+            If service.HasCachedDatabase() Then
+                AnsiConsole.MarkupLine("[yellow]Falling back to previous local cache.[/]")
+                Return previousData
+            End If
+            AnsiConsole.MarkupLine("[yellow]No local cache available. Continuing with an empty dataset.[/]")
+            Return result
+        End If
+
+        AnsiConsole.MarkupLine($"[bold green]✓ Successfully refreshed {result.Count:N0} postal codes![/]")
+        Return result
+    End Function
 
     Private Sub ConfigureLogger()
         Dim logFile As String = Path.Combine(AppContext.WorkingDirectory, "MexicoPostalCodes.log")
@@ -75,7 +106,7 @@ Module Program
                     ExportDataset(postalCodes)
                 Case "Refresh/Re-download Data"
                     If ConfirmChoice("[yellow]Are you sure you want to re-download the database? This might take a few seconds.[/]") Then
-                        postalCodes = service.Refresh()
+                        postalCodes = RefreshWithStatus(service, postalCodes)
                     End If
                 Case "Exit"
                     exitApp = True

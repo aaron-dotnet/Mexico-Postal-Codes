@@ -14,6 +14,7 @@ Public Class c_Scraper
     Private ReadOnly _handler As HttpClientHandler
     Private ReadOnly _httpClient As HttpClient
     Private ReadOnly _logger As ILogger
+    Private ReadOnly _workingDirectory As String
     Private ReadOnly _cookieContainer As CookieContainer
 
     Public Property Host As String = String.Empty
@@ -21,11 +22,16 @@ Public Class c_Scraper
     Public Property Origin As String = String.Empty
 
     Public Sub New()
-        Me.New(Nothing)
+        Me.New(Nothing, Nothing)
     End Sub
 
     Public Sub New(ByVal logger As ILogger)
+        Me.New(logger, Nothing)
+    End Sub
+
+    Public Sub New(ByVal logger As ILogger, ByVal workingDirectory As String)
         _logger = If(logger, NullLogger.Instance)
+        _workingDirectory = If(String.IsNullOrEmpty(workingDirectory), AppContext.WorkingDirectory, workingDirectory)
         _cookieContainer = New CookieContainer()
         _handler = New HttpClientHandler() With {
             .AutomaticDecompression = DecompressionMethods.GZip Or DecompressionMethods.Deflate,
@@ -77,10 +83,12 @@ Public Class c_Scraper
                 If response.IsSuccessStatusCode Then
                     Return Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
                 End If
-                _logger.Log($"GET {url} failed with status {(CInt(response.StatusCode))} {response.ReasonPhrase}", LogLevel.Warning)
+                _logger.Log($"GET {url} failed with HTTP status {(CInt(response.StatusCode))} {response.ReasonPhrase}", LogLevel.Warning)
             End Using
+        Catch hrex As HttpRequestException
+            _logger.Log($"Network error on GET {url}: {hrex.Message}", LogLevel.[Error])
         Catch ex As Exception
-            _logger.Log($"GET {url} failed: {ex.Message}", LogLevel.[Error])
+            _logger.Log($"Unexpected error on GET {url}: {ex.GetType().Name} - {ex.Message}", LogLevel.[Error])
         End Try
         Return String.Empty
     End Function
@@ -122,10 +130,12 @@ Public Class c_Scraper
                         End If
                     End Using
                 End If
-                _logger.Log($"POST {url} failed with status {(CInt(response.StatusCode))} {response.ReasonPhrase}", LogLevel.Warning)
+                _logger.Log($"POST {url} failed with HTTP status {(CInt(response.StatusCode))} {response.ReasonPhrase}", LogLevel.Warning)
             End Using
+        Catch hrex As HttpRequestException
+            _logger.Log($"Network error on POST {url}: {hrex.Message}", LogLevel.[Error])
         Catch ex As Exception
-            _logger.Log($"POST {url} failed: {ex.Message}", LogLevel.[Error])
+            _logger.Log($"Unexpected error on POST {url}: {ex.GetType().Name} - {ex.Message}", LogLevel.[Error])
         End Try
         Return String.Empty
     End Function
@@ -159,11 +169,27 @@ Public Class c_Scraper
             End Select
         End If
 
-        Dim target As String = Path.Combine(AppContext.WorkingDirectory, fileName)
-        If File.Exists(target) Then
-            File.Delete(target)
-        End If
-        File.WriteAllBytes(target, bytes)
+        Dim target As String = Path.Combine(_workingDirectory, fileName)
+        Try
+            ' Ensure the working directory exists before writing. AppContext.WorkingDirectory
+            ' is cached in memory, so a user-deleted folder would still appear valid until
+            ' something else (e.g. the file logger) happens to recreate it.
+            Dim targetDir As String = Path.GetDirectoryName(target)
+            If Not String.IsNullOrEmpty(targetDir) Then
+                Directory.CreateDirectory(targetDir)
+            End If
+
+            If File.Exists(target) Then
+                File.Delete(target)
+            End If
+            File.WriteAllBytes(target, bytes)
+        Catch ioex As IOException
+            _logger.Log($"Disk error saving download to '{target}': {ioex.Message}", LogLevel.[Error])
+            Return String.Empty
+        Catch unauthex As UnauthorizedAccessException
+            _logger.Log($"Permission denied saving download to '{target}': {unauthex.Message}", LogLevel.[Error])
+            Return String.Empty
+        End Try
 
         Return target
     End Function

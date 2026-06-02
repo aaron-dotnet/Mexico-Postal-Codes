@@ -14,7 +14,6 @@ Public NotInheritable Class PostalCodeService
     Public Const SepomexOrigin As String = "https://www.correosdemexico.gob.mx"
     Public Const DatabaseDirectoryName As String = "postal_codes"
     Public Const DatabaseFileName As String = "CPdescarga.txt"
-    Public Const DownloadZipFileName As String = "CPdescargatxt.zip"
 
     Private ReadOnly _logger As ILogger
     Private ReadOnly _workingDir As String
@@ -64,6 +63,9 @@ Public NotInheritable Class PostalCodeService
     End Function
 
     Public Function DownloadParseAndCache() As List(Of c_PostalCode)
+        ' Async-over-sync pattern: blocking on an async method is intentional here
+        ' so the public API stays synchronous. No deadlock because every Await inside
+        ' the chain uses ConfigureAwait(False).
         Dim downloadPath As String = DownloadAsync().GetAwaiter().GetResult()
         If String.IsNullOrEmpty(downloadPath) Then
             _logger.Log("Download failed: no file was produced.", LogLevel.[Error])
@@ -71,22 +73,31 @@ Public NotInheritable Class PostalCodeService
         End If
 
         Dim extractTarget As String = Path.Combine(_workingDir, DatabaseDirectoryName)
-        Dim zipToExtract As String = Path.Combine(_workingDir, DownloadZipFileName)
-        If Not File.Exists(zipToExtract) Then
-            zipToExtract = downloadPath
-        End If
-
-        Dim txtFile As String = ZipExtractor.ExtractZip(zipToExtract, extractTarget, _logger)
+        Dim txtFile As String = ZipExtractor.ExtractZip(downloadPath, extractTarget, _logger)
         If String.IsNullOrEmpty(txtFile) OrElse Not File.Exists(txtFile) Then
             _logger.Log("Extraction failed: no text file was produced.", LogLevel.[Error])
             Return New List(Of c_PostalCode)()
+        End If
+
+        ' Normalize cache name: regardless of the file name that comes from inside the ZIP,
+        ' rename it to DatabaseFileName so HasCachedDatabase() stays consistent across runs
+        ' even if SEPOMEX changes the inner file name.
+        If Not txtFile.Equals(DatabasePath, StringComparison.OrdinalIgnoreCase) Then
+            Try
+                If File.Exists(DatabasePath) Then File.Delete(DatabasePath)
+                Directory.CreateDirectory(Path.GetDirectoryName(DatabasePath))
+                File.Move(txtFile, DatabasePath)
+                txtFile = DatabasePath
+            Catch ex As Exception
+                _logger.Log($"Could not rename extracted file to cache path '{DatabasePath}': {ex.Message}. Using original path '{txtFile}'.", LogLevel.Warning)
+            End Try
         End If
 
         Return PostalCodeParser.Parse(txtFile, _logger)
     End Function
 
     Public Async Function DownloadAsync() As Task(Of String)
-        Using scraper As New c_Scraper(_logger)
+        Using scraper As New c_Scraper(_logger, _workingDir)
             scraper.Host = SepomexHost
             scraper.Referer = SepomexRefererInitial
 
