@@ -115,7 +115,7 @@ Public NotInheritable Class PostalCodeService
                 Return String.Empty
             End If
 
-            Dim coordinates As (X As Integer, Y As Integer) = HtmlHelper.GenerateButtonCoordinates(_random)
+            Dim coordinates As HtmlHelper.Coordinates = HtmlHelper.GenerateButtonCoordinates(_random)
             Dim postData As String = HtmlHelper.BuildSepomexPostData(formSection, coordinates)
 
             scraper.Origin = SepomexOrigin

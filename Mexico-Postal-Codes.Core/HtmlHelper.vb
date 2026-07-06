@@ -44,7 +44,7 @@ Friend NotInheritable Class HtmlHelper
     End Function
 
     Public Shared Function BuildSepomexPostData(ByVal htmlContent As String,
-                                                ByVal buttonCoordinates As (X As Integer, Y As Integer)) As String
+                                                ByVal buttonCoordinates As Coordinates) As String
 
         Return $"__EVENTTARGET={GetInputValue(htmlContent, "__EVENTTARGET")}&" &
             $"__EVENTARGUMENT={GetInputValue(htmlContent, "__EVENTARGUMENT")}&" &
@@ -58,11 +58,20 @@ Friend NotInheritable Class HtmlHelper
             $"btnDescarga.y={buttonCoordinates.Y}"
     End Function
 
-    Public Shared Function GenerateButtonCoordinates(ByVal random As Random) As (X As Integer, Y As Integer)
+    Public Shared Function GenerateButtonCoordinates(ByVal random As Random) As Coordinates
         If random Is Nothing Then Throw New ArgumentNullException(NameOf(random))
-        Dim yPos As Integer = random.Next(2, 22)
-        Dim xPos As Integer = random.Next(2, 72)
-        Return (xPos, yPos)
+        Return New Coordinates(random)
     End Function
-
+    Public Structure Coordinates
+        '     _ _ _ _ _ _ _ _ _ 
+        '   |          X        | 
+        '   | Y    DESCARGAR    |
+        '   | _ _ _ _ _ _ _ _ _ |
+        Public Property X As UShort
+        Public Property Y As UShort
+        Public Sub New(random As Random)
+            Me.X = Convert.ToUInt16(random.Next(2, 72))
+            Me.Y = Convert.ToUInt16(random.Next(2, 22))
+        End Sub
+    End Structure
 End Class
