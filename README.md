@@ -24,6 +24,11 @@ service.ExportToCsv("codigos.csv")
 service.ExportToXml("codigos.xml")
 ```
 
+## Demo
+
+<img width="1270" height="770" alt="sample" src="https://github.com/user-attachments/assets/e4ec14df-05bf-4909-8bfe-0a4de54db20c" />
+
+
 ## API pública
 
 | Clase | Métodos clave |
