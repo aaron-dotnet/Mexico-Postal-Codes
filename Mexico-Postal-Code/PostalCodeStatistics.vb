@@ -3,6 +3,7 @@ Option Infer Off
 
 Imports System.Collections.Generic
 Imports System.Linq
+Imports Mexico_Postal_Code.Core
 
 Public Class PostalCodeStatistics
 
@@ -13,7 +14,7 @@ Public Class PostalCodeStatistics
     Public ReadOnly Property TopStates As IReadOnlyList(Of KeyValuePair(Of String, Integer))
     Public ReadOnly Property TopSettlementTypes As IReadOnlyList(Of KeyValuePair(Of String, Integer))
 
-    Public Shared Function Compute(ByVal postalCodes As IEnumerable(Of c_PostalCode),
+    Public Shared Function Compute(ByVal postalCodes As IEnumerable(Of PostalCodeEntry),
                                    Optional ByVal topCount As Integer = 10) As PostalCodeStatistics
 
         If postalCodes Is Nothing Then
@@ -22,12 +23,12 @@ Public Class PostalCodeStatistics
                 New List(Of KeyValuePair(Of String, Integer)))
         End If
 
-        Dim materialised As List(Of c_PostalCode) = postalCodes.ToList()
+        Dim materialised As List(Of PostalCodeEntry) = postalCodes.ToList()
         Dim statesSet As New HashSet(Of String)()
         Dim municipalitiesSet As New HashSet(Of String)()
         Dim settlementsSet As New HashSet(Of String)()
 
-        For Each p As c_PostalCode In materialised
+        For Each p As PostalCodeEntry In materialised
             If Not String.IsNullOrEmpty(p.Estado) Then statesSet.Add(p.Estado)
             If Not String.IsNullOrEmpty(p.Municipio) Then municipalitiesSet.Add(p.Municipio)
             If Not String.IsNullOrEmpty(p.Asentamiento) Then settlementsSet.Add(p.Asentamiento)

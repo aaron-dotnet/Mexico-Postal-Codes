@@ -43,9 +43,8 @@ Public NotInheritable Class AppContext
         If RuntimeInformation.IsOSPlatform(OSPlatform.Windows) Then
             baseDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
         Else
-            baseDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".local", "share")
+            Dim userDir As String = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            baseDir = Path.Combine(userDir, ".local", "share")
         End If
 
         Dim workingDir As String = Path.Combine(baseDir, "MexicoPostalCodes")

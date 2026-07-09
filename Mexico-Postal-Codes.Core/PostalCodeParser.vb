@@ -8,10 +8,11 @@ Imports System.Text
 Friend NotInheritable Class PostalCodeParser
 
     Private Const FieldSeparator As Char = "|"c
-    Public Shared Function Parse(ByVal filePath As String,
-                                 Optional ByVal logger As ILogger = Nothing) As List(Of c_PostalCode)
 
-        Dim result As New List(Of c_PostalCode)()
+    Public Shared Function Parse(ByVal filePath As String,
+                                 Optional ByVal logger As ILogger = Nothing) As List(Of PostalCodeEntry)
+
+        Dim result As New List(Of PostalCodeEntry)()
         Dim effectiveLogger As ILogger = If(logger, AppContext.Logger)
 
         If String.IsNullOrEmpty(filePath) Then
@@ -25,7 +26,6 @@ Friend NotInheritable Class PostalCodeParser
 
         Try
             Using reader As New StreamReader(filePath, Encoding.GetEncoding("ISO-8859-1"))
-                ' Skip first two lines (metadata and headers)
                 Dim header1 As String = reader.ReadLine()
                 Dim header2 As String = reader.ReadLine()
                 If header1 Is Nothing OrElse header2 Is Nothing Then
@@ -39,7 +39,7 @@ Friend NotInheritable Class PostalCodeParser
                     Dim fields As String() = line.Split(FieldSeparator)
                     If fields.Length < 6 Then Continue While
 
-                    Dim postalCode As New c_PostalCode()
+                    Dim postalCode As New PostalCodeEntry()
                     postalCode.CodigoPostal = fields(0)
                     postalCode.Asentamiento = fields(1)
                     postalCode.TipoAsentamiento = fields(2)

@@ -18,10 +18,6 @@ Public NotInheritable Class PostalCodeExporter
         Me.New(Nothing, Nothing)
     End Sub
 
-    Public Sub New(ByVal workingDirectory As String)
-        Me.New(workingDirectory, Nothing)
-    End Sub
-
     Public Sub New(ByVal workingDirectory As String, ByVal logger As ILogger)
         _workingDir = If(String.IsNullOrEmpty(workingDirectory), AppContext.WorkingDirectory, workingDirectory)
         _logger = If(logger, AppContext.Logger)
@@ -34,14 +30,14 @@ Public NotInheritable Class PostalCodeExporter
         Return Path.Combine(exportDir, fileName)
     End Function
 
-    Public Sub ExportToJson(ByVal postalCodes As IEnumerable(Of c_PostalCode), ByVal filePath As String)
+    Public Sub ExportToJson(ByVal postalCodes As IEnumerable(Of PostalCodeEntry), ByVal filePath As String)
         If String.IsNullOrEmpty(filePath) Then
             Throw New ArgumentException("File path cannot be null or empty.", NameOf(filePath))
         End If
         Dim sb As New StringBuilder()
         sb.Append("[").Append(Environment.NewLine)
         Dim first As Boolean = True
-        For Each p As c_PostalCode In postalCodes
+        For Each p As PostalCodeEntry In postalCodes
             If Not first Then sb.Append(",").Append(Environment.NewLine)
             first = False
             sb.Append("  {").Append(Environment.NewLine)
@@ -66,14 +62,14 @@ Public NotInheritable Class PostalCodeExporter
         File.WriteAllText(filePath, sb.ToString(), New UTF8Encoding(False))
     End Sub
 
-    Public Sub ExportToCsv(ByVal postalCodes As IEnumerable(Of c_PostalCode), ByVal filePath As String)
+    Public Sub ExportToCsv(ByVal postalCodes As IEnumerable(Of PostalCodeEntry), ByVal filePath As String)
         If String.IsNullOrEmpty(filePath) Then
             Throw New ArgumentException("File path cannot be null or empty.", NameOf(filePath))
         End If
         Const header As String = "CodigoPostal,Asentamiento,TipoAsentamiento,Municipio,Estado,Ciudad,D_CP,c_Estado,c_Oficina,c_CP,c_TipoAsentamiento,c_Municipio,id_Asentamiento_cpcons,d_zona,c_cve_ciudad"
         Using writer As New StreamWriter(filePath, False, New UTF8Encoding(False))
             writer.WriteLine(header)
-            For Each p As c_PostalCode In postalCodes
+            For Each p As PostalCodeEntry In postalCodes
                 Dim line As String =
                     $"{EscapeCsv(p.CodigoPostal)}," &
                     $"{EscapeCsv(p.Asentamiento)}," &
@@ -95,7 +91,7 @@ Public NotInheritable Class PostalCodeExporter
         End Using
     End Sub
 
-    Public Sub ExportToXml(ByVal postalCodes As IEnumerable(Of c_PostalCode), ByVal filePath As String)
+    Public Sub ExportToXml(ByVal postalCodes As IEnumerable(Of PostalCodeEntry), ByVal filePath As String)
         If String.IsNullOrEmpty(filePath) Then
             Throw New ArgumentException("File path cannot be null or empty.", NameOf(filePath))
         End If
@@ -107,7 +103,7 @@ Public NotInheritable Class PostalCodeExporter
         Using writer As XmlWriter = XmlWriter.Create(filePath, settings)
             writer.WriteStartDocument()
             writer.WriteStartElement("PostalCodes")
-            For Each p As c_PostalCode In postalCodes
+            For Each p As PostalCodeEntry In postalCodes
                 writer.WriteStartElement("PostalCode")
                 writer.WriteAttributeString("Code", p.CodigoPostal)
                 writer.WriteAttributeString("Settlement", p.Asentamiento)

@@ -21,14 +21,6 @@ Friend Class c_Scraper
     Public Property Referer As String = String.Empty
     Public Property Origin As String = String.Empty
 
-    Public Sub New()
-        Me.New(Nothing, Nothing)
-    End Sub
-
-    Public Sub New(ByVal logger As ILogger)
-        Me.New(logger, Nothing)
-    End Sub
-
     Public Sub New(ByVal logger As ILogger, ByVal workingDirectory As String)
         _logger = If(logger, NullLogger.Instance)
         _workingDirectory = If(String.IsNullOrEmpty(workingDirectory), AppContext.WorkingDirectory, workingDirectory)
@@ -42,7 +34,7 @@ Friend Class c_Scraper
     End Sub
 
     Private Sub SetHeaders()
-        Const version As String = "149.0"
+        Const version As String = "150.0"
 
         With _httpClient.DefaultRequestHeaders
             If Not .Contains("User-Agent") Then

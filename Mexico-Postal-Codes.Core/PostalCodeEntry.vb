@@ -1,13 +1,13 @@
 Option Strict On
 Option Infer Off
 
-Public Class c_PostalCode
-    Public Property CodigoPostal As String      'postal code
-    Public Property Asentamiento As String      'settlement
-    Public Property TipoAsentamiento As String  'settlement type
-    Public Property Municipio As String         'municipality
-    Public Property Estado As String            ' state
-    Public Property Ciudad As String            ' city
+Public Class PostalCodeEntry
+    Public Property CodigoPostal As String
+    Public Property Asentamiento As String
+    Public Property TipoAsentamiento As String
+    Public Property Municipio As String
+    Public Property Estado As String
+    Public Property Ciudad As String
     Public Property D_CP As String
     Public Property c_Estado As String
     Public Property c_Oficina As String
