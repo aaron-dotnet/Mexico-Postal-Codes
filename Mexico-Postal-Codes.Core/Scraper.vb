@@ -6,9 +6,10 @@ Imports System.Net
 Imports System.Net.Http
 Imports System.Net.Http.Headers
 Imports System.Text
+Imports System.Threading
 Imports System.Threading.Tasks
 
-Friend Class c_Scraper
+Friend Class Scraper
     Implements IDisposable
 
     Private ReadOnly _handler As HttpClientHandler
@@ -64,14 +65,15 @@ Friend Class c_Scraper
         End With
     End Sub
 
-    Public Async Function GetAsync(ByVal url As String) As Task(Of String)
+    Public Async Function GetAsync(ByVal url As String,
+                                   Optional ByVal cancellationToken As CancellationToken = Nothing) As Task(Of String)
         If String.IsNullOrEmpty(url) Then
             Throw New ArgumentException("URL cannot be null or empty.", NameOf(url))
         End If
 
         SetHeaders()
         Try
-            Using response As HttpResponseMessage = Await _httpClient.GetAsync(url).ConfigureAwait(False)
+            Using response As HttpResponseMessage = Await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(False)
                 If response.IsSuccessStatusCode Then
                     Return Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
                 End If
@@ -85,26 +87,25 @@ Friend Class c_Scraper
         Return String.Empty
     End Function
 
-    Public Async Function PostAsync(ByVal url As String, ByVal content As String) As Task(Of String)
+    Public Async Function PostAsync(ByVal url As String, ByVal content As String,
+                                    Optional ByVal cancellationToken As CancellationToken = Nothing) As Task(Of String)
         If String.IsNullOrEmpty(url) Then
             Throw New ArgumentException("URL cannot be null or empty.", NameOf(url))
         End If
         Dim httpContent As New StringContent(content, Encoding.UTF8, "application/x-www-form-urlencoded")
-        Return Await InternalPostAsync(url, httpContent).ConfigureAwait(False)
+        Return Await InternalPostAsync(url, httpContent, cancellationToken).ConfigureAwait(False)
     End Function
 
-    Private Async Function InternalPostAsync(ByVal url As String, ByVal content As HttpContent) As Task(Of String)
+    Private Async Function InternalPostAsync(ByVal url As String, ByVal content As HttpContent,
+                                             ByVal cancellationToken As CancellationToken) As Task(Of String)
         SetHeaders()
         Try
-            Using response As HttpResponseMessage = Await _httpClient.PostAsync(url, content).ConfigureAwait(False)
+            Using response As HttpResponseMessage = Await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
                 If response.IsSuccessStatusCode Then
                     Using respContent As HttpContent = response.Content
                         Dim contentDisposition As ContentDispositionHeaderValue = respContent.Headers.ContentDisposition
                         Dim contentType As String = If(respContent.Headers.ContentType?.MediaType, String.Empty)
 
-                        ' SEPOMEX always replies with Content-Disposition. The application/*
-                        ' fallback covers the rare case where the header is absent but the
-                        ' body is still a binary download.
                         If contentDisposition IsNot Nothing AndAlso
                            Not String.IsNullOrEmpty(contentDisposition.FileName) Then
                             Dim fileName As String = contentDisposition.FileName.Trim(""""c)
@@ -134,8 +135,6 @@ Friend Class c_Scraper
 
         If String.IsNullOrEmpty(fileName) Then
             fileName = "download_" & DateTime.Now.ToString("yyyyMMddHHmmss")
-            ' Only ZIP is expected from SEPOMEX, but fall back to the
-            ' subtype extension for any other application/* response.
             If contentType = "application/zip" Then
                 fileName &= ".zip"
             ElseIf Not String.IsNullOrEmpty(contentType) AndAlso contentType.Contains("/"c) Then
@@ -148,9 +147,6 @@ Friend Class c_Scraper
 
         Dim target As String = Path.Combine(_workingDirectory, fileName)
         Try
-            ' Ensure the working directory exists before writing. AppContext.WorkingDirectory
-            ' is cached in memory, so a user-deleted folder would still appear valid until
-            ' something else (e.g. the file logger) happens to recreate it.
             Dim targetDir As String = Path.GetDirectoryName(target)
             If Not String.IsNullOrEmpty(targetDir) Then
                 Directory.CreateDirectory(targetDir)

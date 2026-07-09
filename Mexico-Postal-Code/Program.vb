@@ -94,7 +94,11 @@ Module Program
 
             Select Case choice
                 Case "Search & Browse Postal Codes"
-                    BrowsePostalCodes(service)
+                    Try
+                        BrowsePostalCodes(service)
+                    Catch ex As InvalidOperationException
+                        AnsiConsole.MarkupLine($"[red]{ex.Message}[/]")
+                    End Try
                 Case "View Statistics"
                     ShowStatistics(service)
                 Case "Export Dataset"

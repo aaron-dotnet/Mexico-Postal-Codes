@@ -3,6 +3,7 @@ Option Infer Off
 
 Imports System.Collections.Generic
 Imports System.IO
+Imports System.Threading
 Imports System.Threading.Tasks
 
 Public NotInheritable Class PostalCodeService
@@ -19,6 +20,7 @@ Public NotInheritable Class PostalCodeService
     Private ReadOnly _workingDir As String
     Private ReadOnly _random As Random
     Private _postalCodes As List(Of PostalCodeEntry)
+    Private _postalCodesReadOnly As IReadOnlyList(Of PostalCodeEntry)
     Private _isLoaded As Boolean
 
     Public Sub New(Optional ByVal workingDirectory As String = Nothing,
@@ -26,13 +28,16 @@ Public NotInheritable Class PostalCodeService
         _workingDir = If(String.IsNullOrEmpty(workingDirectory), AppContext.WorkingDirectory, workingDirectory)
         _logger = If(logger, AppContext.Logger)
         _random = New Random()
-        _postalCodes = New List(Of PostalCodeEntry)()
+        SetPostalCodes(New List(Of PostalCodeEntry)())
         _isLoaded = False
     End Sub
 
     Public ReadOnly Property PostalCodes As IReadOnlyList(Of PostalCodeEntry)
         Get
-            Return _postalCodes.AsReadOnly()
+            If _postalCodesReadOnly Is Nothing AndAlso _postalCodes IsNot Nothing Then
+                _postalCodesReadOnly = _postalCodes.AsReadOnly()
+            End If
+            Return _postalCodesReadOnly
         End Get
     End Property
 
@@ -55,7 +60,7 @@ Public NotInheritable Class PostalCodeService
     Public Function LoadOrDownload() As List(Of PostalCodeEntry)
         If HasCachedDatabase() Then
             Try
-                _postalCodes = PostalCodeParser.Parse(DatabasePath, _logger)
+                SetPostalCodes(PostalCodeParser.Parse(DatabasePath, _logger))
                 _isLoaded = True
                 Return _postalCodes
             Catch ex As Exception
@@ -65,49 +70,49 @@ Public NotInheritable Class PostalCodeService
         Return DownloadParseAndCacheSync()
     End Function
 
-    Public Async Function LoadOrDownloadAsync() As Task(Of List(Of PostalCodeEntry))
+    Public Async Function LoadOrDownloadAsync(Optional ByVal cancellationToken As CancellationToken = Nothing) As Task(Of List(Of PostalCodeEntry))
         If HasCachedDatabase() Then
             Try
-                _postalCodes = PostalCodeParser.Parse(DatabasePath, _logger)
+                SetPostalCodes(PostalCodeParser.Parse(DatabasePath, _logger))
                 _isLoaded = True
                 Return _postalCodes
             Catch ex As Exception
                 _logger.Log($"Cached database at '{DatabasePath}' is unreadable. Re-downloading. ({ex.Message})", LogLevel.Warning)
             End Try
         End If
-        Return Await DownloadParseAndCacheAsync().ConfigureAwait(False)
+        Return Await DownloadParseAndCacheAsync(cancellationToken).ConfigureAwait(False)
     End Function
 
     Public Function Refresh() As List(Of PostalCodeEntry)
         Return DownloadParseAndCacheSync()
     End Function
 
-    Public Async Function RefreshAsync() As Task(Of List(Of PostalCodeEntry))
-        Return Await DownloadParseAndCacheAsync().ConfigureAwait(False)
+    Public Async Function RefreshAsync(Optional ByVal cancellationToken As CancellationToken = Nothing) As Task(Of List(Of PostalCodeEntry))
+        Return Await DownloadParseAndCacheAsync(cancellationToken).ConfigureAwait(False)
     End Function
 
     Private Function DownloadParseAndCacheSync() As List(Of PostalCodeEntry)
-        Dim downloadPath As String = DownloadAsync().GetAwaiter().GetResult()
+        Dim downloadPath As String = DownloadAsync(Nothing).GetAwaiter().GetResult()
         If String.IsNullOrEmpty(downloadPath) Then
             _logger.Log("Download failed: no file was produced.", LogLevel.[Error])
-            _postalCodes = New List(Of PostalCodeEntry)()
+            SetPostalCodes(New List(Of PostalCodeEntry)())
             _isLoaded = False
             Return _postalCodes
         End If
-        _postalCodes = ExtractAndParse(downloadPath)
+        SetPostalCodes(ExtractAndParse(downloadPath))
         _isLoaded = True
         Return _postalCodes
     End Function
 
-    Private Async Function DownloadParseAndCacheAsync() As Task(Of List(Of PostalCodeEntry))
-        Dim downloadPath As String = Await DownloadAsync().ConfigureAwait(False)
+    Private Async Function DownloadParseAndCacheAsync(ByVal cancellationToken As CancellationToken) As Task(Of List(Of PostalCodeEntry))
+        Dim downloadPath As String = Await DownloadAsync(cancellationToken).ConfigureAwait(False)
         If String.IsNullOrEmpty(downloadPath) Then
             _logger.Log("Download failed: no file was produced.", LogLevel.[Error])
-            _postalCodes = New List(Of PostalCodeEntry)()
+            SetPostalCodes(New List(Of PostalCodeEntry)())
             _isLoaded = False
             Return _postalCodes
         End If
-        _postalCodes = ExtractAndParse(downloadPath)
+        SetPostalCodes(ExtractAndParse(downloadPath))
         _isLoaded = True
         Return _postalCodes
     End Function
@@ -115,6 +120,15 @@ Public NotInheritable Class PostalCodeService
     Private Function ExtractAndParse(ByVal downloadPath As String) As List(Of PostalCodeEntry)
         Dim extractTarget As String = Path.Combine(_workingDir, DatabaseDirectoryName)
         Dim txtFile As String = ZipExtractor.ExtractZip(downloadPath, extractTarget, _logger)
+
+        Try
+            If File.Exists(downloadPath) Then
+                File.Delete(downloadPath)
+            End If
+        Catch ex As Exception
+            _logger.Log($"Could not delete temporary ZIP '{downloadPath}': {ex.Message}", LogLevel.Warning)
+        End Try
+
         If String.IsNullOrEmpty(txtFile) OrElse Not File.Exists(txtFile) Then
             _logger.Log("Extraction failed: no text file was produced.", LogLevel.[Error])
             Return New List(Of PostalCodeEntry)()
@@ -135,8 +149,8 @@ Public NotInheritable Class PostalCodeService
     End Function
 
     Public Function Search(Optional ByVal query As String = Nothing) As List(Of PostalCodeEntry)
-        If Not _isLoaded OrElse _postalCodes Is Nothing OrElse _postalCodes.Count = 0 Then
-            Return New List(Of PostalCodeEntry)()
+        If Not _isLoaded Then
+            Throw New InvalidOperationException("No data loaded. Call LoadOrDownload first.")
         End If
 
         If String.IsNullOrWhiteSpace(query) Then
@@ -197,12 +211,12 @@ Public NotInheritable Class PostalCodeService
         Return exporter.BuildExportPath(extension)
     End Function
 
-    Public Async Function DownloadAsync() As Task(Of String)
-        Using scraper As New c_Scraper(_logger, _workingDir)
+    Friend Async Function DownloadAsync(Optional ByVal cancellationToken As CancellationToken = Nothing) As Task(Of String)
+        Using scraper As New Scraper(_logger, _workingDir)
             scraper.Host = SepomexHost
             scraper.Referer = SepomexRefererInitial
 
-            Dim response As String = Await scraper.GetAsync(SepomexMainUrl).ConfigureAwait(False)
+            Dim response As String = Await scraper.GetAsync(SepomexMainUrl, cancellationToken).ConfigureAwait(False)
             If String.IsNullOrEmpty(response) Then
                 _logger.Log("Initial SEPOMEX GET returned empty body.", LogLevel.[Error])
                 Return String.Empty
@@ -222,8 +236,13 @@ Public NotInheritable Class PostalCodeService
             scraper.Origin = SepomexOrigin
             scraper.Referer = SepomexRefererExport
 
-            Return Await scraper.PostAsync(SepomexMainUrl, postData).ConfigureAwait(False)
+            Return Await scraper.PostAsync(SepomexMainUrl, postData, cancellationToken).ConfigureAwait(False)
         End Using
     End Function
+
+    Private Sub SetPostalCodes(ByVal codes As List(Of PostalCodeEntry))
+        _postalCodes = codes
+        _postalCodesReadOnly = Nothing
+    End Sub
 
 End Class

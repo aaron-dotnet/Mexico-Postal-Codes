@@ -9,28 +9,24 @@ Imports System.IO
 Imports System.Text
 Imports System.Xml
 
-Public NotInheritable Class PostalCodeExporter
+Friend NotInheritable Class PostalCodeExporter
 
     Private ReadOnly _logger As ILogger
     Private ReadOnly _workingDir As String
 
-    Public Sub New()
-        Me.New(Nothing, Nothing)
-    End Sub
-
-    Public Sub New(ByVal workingDirectory As String, ByVal logger As ILogger)
+    Friend Sub New(ByVal workingDirectory As String, ByVal logger As ILogger)
         _workingDir = If(String.IsNullOrEmpty(workingDirectory), AppContext.WorkingDirectory, workingDirectory)
         _logger = If(logger, AppContext.Logger)
     End Sub
 
-    Public Function BuildExportPath(ByVal extension As String) As String
+    Friend Function BuildExportPath(ByVal extension As String) As String
         Dim exportDir As String = Path.Combine(_workingDir, "exports")
         Directory.CreateDirectory(exportDir)
         Dim fileName As String = "mexico_postal_codes_" & DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) & "." & extension
         Return Path.Combine(exportDir, fileName)
     End Function
 
-    Public Sub ExportToJson(ByVal postalCodes As IEnumerable(Of PostalCodeEntry), ByVal filePath As String)
+    Friend Sub ExportToJson(ByVal postalCodes As IEnumerable(Of PostalCodeEntry), ByVal filePath As String)
         If String.IsNullOrEmpty(filePath) Then
             Throw New ArgumentException("File path cannot be null or empty.", NameOf(filePath))
         End If
@@ -62,7 +58,7 @@ Public NotInheritable Class PostalCodeExporter
         File.WriteAllText(filePath, sb.ToString(), New UTF8Encoding(False))
     End Sub
 
-    Public Sub ExportToCsv(ByVal postalCodes As IEnumerable(Of PostalCodeEntry), ByVal filePath As String)
+    Friend Sub ExportToCsv(ByVal postalCodes As IEnumerable(Of PostalCodeEntry), ByVal filePath As String)
         If String.IsNullOrEmpty(filePath) Then
             Throw New ArgumentException("File path cannot be null or empty.", NameOf(filePath))
         End If
@@ -91,7 +87,7 @@ Public NotInheritable Class PostalCodeExporter
         End Using
     End Sub
 
-    Public Sub ExportToXml(ByVal postalCodes As IEnumerable(Of PostalCodeEntry), ByVal filePath As String)
+    Friend Sub ExportToXml(ByVal postalCodes As IEnumerable(Of PostalCodeEntry), ByVal filePath As String)
         If String.IsNullOrEmpty(filePath) Then
             Throw New ArgumentException("File path cannot be null or empty.", NameOf(filePath))
         End If
