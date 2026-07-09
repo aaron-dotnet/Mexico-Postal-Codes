@@ -181,11 +181,7 @@ Public NotInheritable Class PostalCodeService
 
     Private Shared Function ContainsIgnoreCase(ByVal source As String, ByVal value As String) As Boolean
         If String.IsNullOrEmpty(source) Then Return False
-        ' remove diacritics for comparison:
-        Dim normalizedSource As String = source.Normalize(NormalizationForm.FormD)
-        Dim normalizedValue As String = value.Normalize(NormalizationForm.FormD)
-
-        Return normalizedSource.IndexOf(normalizedValue, StringComparison.OrdinalIgnoreCase) >= 0
+        Return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0
     End Function
 
     Public Function ExportToJson(ByVal filePath As String) As String
