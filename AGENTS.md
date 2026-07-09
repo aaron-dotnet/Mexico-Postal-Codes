@@ -39,6 +39,11 @@ service.Refresh()                    ' force re-download
 - Async variants (`LoadOrDownloadAsync`, `RefreshAsync`) accept optional `CancellationToken`.
 - All `Await` use `.ConfigureAwait(False)` — intentional deadlock prevention for library consumers.
 - Sync wrappers use `.GetAwaiter().GetResult()` (not `.Result` or `.Wait()`).
+- Constructor accepts optional `httpTimeoutSeconds` (default 30). Passed to `Scraper` which sets `HttpClient.Timeout`.
+
+## Search normalization
+
+`Search()` trims the query and normalizes both query and source fields by removing Unicode diacritics (accents) before matching. The comparison is case-insensitive. `"Merida"`, `"Mérida"`, and `"MERIDA"` all return the same results.
 
 ## Classes moved out of Core library
 
@@ -67,7 +72,3 @@ service.Refresh()                    ' force re-download
 | `{AppData}/MexicoPostalCodes/MexicoPostalCodes.log` | Log file |
 
 Working directory is `AppData` on Windows, `~/.local/share` on Linux. Override via `PostalCodeService(workingDirectory:=...)`.
-
-## README is stale
-
-The `README.md` references old class names (`c_PostalCode`, `PostalCodeQuery`, `PostalCodeStatistics` in API table) and outdated usage patterns. Do not rely on it for API guidance — use `AGENTS.md` or read source files.

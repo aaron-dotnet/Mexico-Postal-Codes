@@ -5,36 +5,49 @@
 
 Librería .NET (netstandard 2.0) para descargar, consultar y exportar el catálogo oficial de códigos postales de México publicado por SEPOMEX. Ideal para validación de direcciones en e-commerce, logística y sistemas de envío dentro del país.
 
-No hay API pública. Esta librería hace scraping del sitio de descarga, parsea el ZIP resultante y expone los datos como objetos `c_PostalCode`. La primera vez descarga el catálogo de SEPOMEX y lo cachea en disco; las siguientes lecturas usan el archivo local sin necesidad de conexión.
+La primera vez descarga el catálogo de SEPOMEX y lo cachea en disco; las siguientes lecturas usan el archivo local sin necesidad de conexión.
 
 ## Uso rápido
 
-```vb.net
+```vbnet
 Imports Mexico_Postal_Code.Core
 
-AppContext.Logger = New FileLogger("logs.txt")
 Dim service As New PostalCodeService()
-Dim codigos As List(Of c_PostalCode) = service.LoadOrDownload()
+service.LoadOrDownload()                     ' descarga o usa caché
 
-' Buscar por colonia, municipio o estado
-Dim resultados = PostalCodeQuery.Search(codigos, "Mérida")
-' Buscar por código postal exacto
-Dim porCp = PostalCodeQuery.Search(codigos, "97100")
+' Búsqueda sin acentos (encuentra "Mérida" incluso buscando "Merida")
+Dim resultados = service.Search("Merida")
 
-' Exportar
-Dim exporter As New PostalCodeExporter()
-exporter.ExportToJson(codigos, "codigos.json")
+' Exportar a archivo
+service.ExportToJson("codigos.json")
+service.ExportToCsv("codigos.csv")
+service.ExportToXml("codigos.xml")
 ```
 
 ## API pública
 
 | Clase | Métodos clave |
 |-------|---------------|
-| `PostalCodeService` | `LoadOrDownload()`, `Refresh()`, `HasCachedDatabase()`, `DatabasePath` |
-| `PostalCodeQuery` | `Search(postalCodes, query)` — búsqueda por CP, colonia, municipio o estado |
-| `PostalCodeStatistics` | `Compute(postalCodes)` — totales, únicos, top estados y tipos |
-| `PostalCodeExporter` | `ExportToJson()`, `ExportToCsv()`, `ExportToXml()` |
-| `c_PostalCode` | 15 propiedades: `CodigoPostal`, `Asentamiento`, `TipoAsentamiento`, `Municipio`, `Estado`, `Ciudad`, y más |
+| `PostalCodeService` | `LoadOrDownload()`, `LoadOrDownloadAsync(token)`, `Refresh()`, `RefreshAsync(token)`, `Search(query)`, `ExportToJson/Csv/Xml(path)`, `BuildExportPath(ext)`, `HasCachedDatabase()`, `DatabasePath` |
+| `PostalCodeEntry` | 15 propiedades: `CodigoPostal`, `Asentamiento`, `TipoAsentamiento`, `Municipio`, `Estado`, `Ciudad`, `d_zona`, etc. |
+
+`PostalCodeService` es stateful: mantiene los datos internamente. `Search()`, `ExportTo*()` lanzan `InvalidOperationException` si no hay datos cargados.
+
+La búsqueda normaliza acentos: "Merida", "Mérida" y "MERIDA" retornan los mismos resultados.
+
+## Constructor
+
+```vbnet
+' Valores por defecto (workingDir = AppData/~/.local, logger = NullLogger, timeout = 30s)
+Dim service As New PostalCodeService()
+
+' Personalizado
+Dim service As New PostalCodeService(
+    workingDirectory:="C:\data",
+    logger:=New FileLogger("log.txt"),
+    httpTimeoutSeconds:=60
+)
+```
 
 ## Modelo de datos
 
@@ -51,6 +64,8 @@ Public Interface ILogger
     Sub Log(ByVal message As String, ByVal level As LogLevel)
 End Interface
 ```
+
+Incluye `FileLogger` y `NullLogger`. Configuración global vía `AppContext.Logger`.
 
 ## Dependencias
 

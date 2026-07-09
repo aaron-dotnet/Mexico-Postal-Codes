@@ -2,7 +2,9 @@ Option Strict On
 Option Infer Off
 
 Imports System.Collections.Generic
+Imports System.Globalization
 Imports System.IO
+Imports System.Text
 Imports System.Threading
 Imports System.Threading.Tasks
 
@@ -19,15 +21,18 @@ Public NotInheritable Class PostalCodeService
     Private ReadOnly _logger As ILogger
     Private ReadOnly _workingDir As String
     Private ReadOnly _random As Random
+    Private ReadOnly _httpTimeoutSeconds As Integer
     Private _postalCodes As List(Of PostalCodeEntry)
     Private _postalCodesReadOnly As IReadOnlyList(Of PostalCodeEntry)
     Private _isLoaded As Boolean
 
     Public Sub New(Optional ByVal workingDirectory As String = Nothing,
-                   Optional ByVal logger As ILogger = Nothing)
+                   Optional ByVal logger As ILogger = Nothing,
+                   Optional ByVal httpTimeoutSeconds As Integer = 30)
         _workingDir = If(String.IsNullOrEmpty(workingDirectory), AppContext.WorkingDirectory, workingDirectory)
         _logger = If(logger, AppContext.Logger)
         _random = New Random()
+        _httpTimeoutSeconds = If(httpTimeoutSeconds > 0, httpTimeoutSeconds, 30)
         SetPostalCodes(New List(Of PostalCodeEntry)())
         _isLoaded = False
     End Sub
@@ -176,7 +181,11 @@ Public NotInheritable Class PostalCodeService
 
     Private Shared Function ContainsIgnoreCase(ByVal source As String, ByVal value As String) As Boolean
         If String.IsNullOrEmpty(source) Then Return False
-        Return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0
+        ' remove diacritics for comparison:
+        Dim normalizedSource As String = source.Normalize(NormalizationForm.FormD)
+        Dim normalizedValue As String = value.Normalize(NormalizationForm.FormD)
+
+        Return normalizedSource.IndexOf(normalizedValue, StringComparison.OrdinalIgnoreCase) >= 0
     End Function
 
     Public Function ExportToJson(ByVal filePath As String) As String
@@ -212,7 +221,7 @@ Public NotInheritable Class PostalCodeService
     End Function
 
     Friend Async Function DownloadAsync(Optional ByVal cancellationToken As CancellationToken = Nothing) As Task(Of String)
-        Using scraper As New Scraper(_logger, _workingDir)
+        Using scraper As New Scraper(_logger, _workingDir, _httpTimeoutSeconds)
             scraper.Host = SepomexHost
             scraper.Referer = SepomexRefererInitial
 

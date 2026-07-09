@@ -22,7 +22,9 @@ Friend Class Scraper
     Public Property Referer As String = String.Empty
     Public Property Origin As String = String.Empty
 
-    Public Sub New(ByVal logger As ILogger, ByVal workingDirectory As String)
+    Public Sub New(ByVal logger As ILogger,
+                   ByVal workingDirectory As String,
+                   Optional ByVal httpTimeoutSeconds As Integer = 30)
         _logger = If(logger, NullLogger.Instance)
         _workingDirectory = If(String.IsNullOrEmpty(workingDirectory), AppContext.WorkingDirectory, workingDirectory)
         _cookieContainer = New CookieContainer()
@@ -32,6 +34,9 @@ Friend Class Scraper
             .UseCookies = True
         }
         _httpClient = New HttpClient(_handler)
+        If httpTimeoutSeconds > 0 Then
+            _httpClient.Timeout = TimeSpan.FromSeconds(httpTimeoutSeconds)
+        End If
     End Sub
 
     Private Sub SetHeaders()
